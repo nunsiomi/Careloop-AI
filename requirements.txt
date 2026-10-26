@@ -1,0 +1,9 @@
+fastapi
+uvicorn[standard]
+pydantic>=2
+apscheduler
+anthropic
+livekit-agents
+httpx
+pytest
+pytest-asyncio

@@ -1,0 +1,8 @@
+.env
+*.db
+__pycache__/
+.venv/
+.ipynb_checkpoints/
+*.wav
+*.mp3
+*.egg-info/
