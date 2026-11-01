@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>CareLoop UI style guide</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body class="dashboard">
+    <main class="page stack">
+      <header>
+        <p class="status-chip status-beta">Beta</p>
+        <h1 class="dashboard-heading">CareLoop UI style guide</h1>
+        <p>Reusable interface components with fictional, non-clinical examples.</p>
+      </header>
+
+      <!-- Buttons -->
+      <section class="card stack" aria-labelledby="buttons-heading">
+        <h2 id="buttons-heading" class="card-title dashboard-heading">Buttons</h2>
+        <div class="cluster">
+          <button class="btn btn-primary" type="button">Primary action</button>
+          <button class="btn btn-secondary" type="button">Secondary action</button>
+          <button class="btn btn-success" type="button">Confirm</button>
+          <button class="btn btn-danger" type="button">Escalation action</button>
+          <button class="btn btn-ghost" type="button">Ghost action</button>
+        </div>
+      </section>
+
+      <!-- Form controls -->
+      <section class="card stack" aria-labelledby="forms-heading">
+        <h2 id="forms-heading" class="card-title dashboard-heading">Form controls</h2>
+        <div class="field">
+          <label for="style-name">Display name</label>
+          <input class="input" id="style-name" name="style-name" placeholder="Example name" type="text">
+        </div>
+        <div class="field">
+          <label for="style-option">Example option</label>
+          <select class="select" id="style-option" name="style-option">
+            <option>Select an option</option>
+            <option>Option one</option>
+          </select>
+          <p class="helper-text">Supporting text appears here.</p>
+        </div>
+        <div class="checkbox-row">
+          <input class="checkbox" id="style-consent" name="style-consent" type="checkbox">
+          <label class="checkbox-label" for="style-consent">I understand this is a visual example.</label>
+        </div>
+      </section>
+
+      <!-- Status chips -->
+      <section class="card stack" aria-labelledby="chips-heading">
+        <h2 id="chips-heading" class="card-title dashboard-heading">Status chips</h2>
+        <div class="cluster">
+          <span class="status-chip status-needs-review">Needs review</span>
+          <span class="status-chip status-approved">Approved</span>
+          <span class="status-chip status-escalated">Open escalation</span>
+          <span class="status-chip status-resolved">Resolved</span>
+          <span class="status-chip status-beta">Beta</span>
+        </div>
+      </section>
+
+      <!-- Patient components -->
+      <section class="card stack" aria-labelledby="patient-heading">
+        <h2 id="patient-heading" class="card-title">Patient components</h2>
+        <div class="chat" aria-label="Example conversation">
+          <div class="chat-bubble chat-careloop"><p>Welcome to CareLoop.</p></div>
+          <div class="chat-bubble chat-patient"><p>Hello.</p></div>
+          <div class="chat-bubble chat-system"><p>Message status: received</p></div>
+        </div>
+        <article class="plan-item">
+          <h3>Example plan item</h3>
+          <p>Details are provided by the API in the live product.</p>
+          <span class="status-chip status-needs-review">Needs review</span>
+        </article>
+        <aside class="emergency-banner" aria-labelledby="emergency-heading">
+          <div>
+            <h2 id="emergency-heading">Open escalation</h2>
+            <p>This visual treatment is reserved for red flags and open escalations.</p>
+          </div>
+        </aside>
+      </section>
+
+      <!-- Dashboard components -->
+      <section class="card stack" aria-labelledby="dashboard-heading">
+        <h2 id="dashboard-heading" class="card-title dashboard-heading">Dashboard components</h2>
+        <nav class="sidebar" aria-label="Example sidebar">
+          <a class="brand" href="#dashboard-heading">CareLoop</a>
+          <div class="sidebar-nav">
+            <a aria-current="page" href="#dashboard-heading">Overview</a>
+            <a href="#dashboard-heading">Activity</a>
+            <a href="#dashboard-heading">Settings</a>
+          </div>
+        </nav>
+        <div class="table-wrap">
+          <table class="table">
+            <caption class="sr-only">Example activity table</caption>
+            <thead><tr><th scope="col">Item</th><th scope="col">Status</th><th scope="col">Updated</th></tr></thead>
+            <tbody><tr><td>Example record</td><td><span class="status-chip status-approved">Approved</span></td><td>Today</td></tr></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- Feedback and loading -->
+      <section class="card stack" aria-labelledby="feedback-heading">
+        <h2 id="feedback-heading" class="card-title dashboard-heading">Feedback and loading</h2>
+        <div class="skeleton" aria-label="Loading example">
+          <div class="skeleton skeleton-line"></div>
+          <div class="skeleton skeleton-line"></div>
+        </div>
+        <div class="typing-indicator" aria-label="CareLoop is typing"><span></span><span></span><span></span></div>
+        <div class="toast styleguide-toast" role="status"><p>Example confirmation message.</p></div>
+      </section>
+
+      <!-- Language rendering check -->
+      <section class="card" aria-labelledby="language-heading">
+        <h2 id="language-heading" class="card-title">Language rendering check</h2>
+        <p class="card-copy">ẹ ọ ṣ ń ị ụ ṅ ɓ ɗ ƙ ƴ à á è é ò ó</p>
+      </section>
+    </main>
+
+    <!-- Modal example -->
+    <div class="modal-backdrop styleguide-modal" role="presentation">
+      <section class="modal" aria-labelledby="modal-heading" role="dialog" aria-modal="true">
+        <h2 id="modal-heading" class="dashboard-heading">Example modal</h2>
+        <p>Modal content goes here.</p>
+        <button class="btn btn-primary" type="button">Done</button>
+      </section>
+    </div>
+  </body>
+</html>

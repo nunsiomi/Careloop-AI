@@ -1,0 +1,96 @@
+/* CareLoop design tokens. This is the only file allowed to contain hex or rgb colour values. */
+:root {
+  /* Paper: a cool lilac, so every page carries the purple without shouting. */
+  --paper-50: #FAF8FE;
+  --paper-100: #F1ECFA;
+  --paper-200: #E6DEF4;
+  --line: #D9CEEC;
+  --line-strong: #B9A8D6;
+  --white: #FFFFFF;
+
+  /* Ink: purple-black, never neutral grey. */
+  --ink-900: #22163A;
+  --ink-700: #423659;
+  --ink-600: #5A4E70;
+
+  /* Purple: the brand. Aubergine for deep surfaces, royal for actions. */
+  --aubergine-950: #1E0F2E;
+  --aubergine-900: #2B1742;
+  --aubergine-800: #3A2058;
+  --purple-700: #4B2A8C;
+  --purple-600: #5B37A6;
+  --purple-500: #7A55C7;
+  --purple-300: #B9A0EA;
+  --purple-200: #D6C7F5;
+  --purple-100: #ECE4FB;
+
+  /* Tomi: marigold belongs only to the assistant (the loop centre, voice, Tomi's marks). */
+  --marigold-400: #F4B63F;
+  --marigold-200: #F9DB9A;
+  --marigold-100: #FDF1D6;
+
+  /* Done and verified. */
+  --green-800: #1E6B4B;
+  --green-100: #DDF0E6;
+
+  /* Caution: verifier issues, overdue, amber escalations. */
+  --amber-700: #8A5300;
+  --amber-400: #E9A23B;
+  --amber-100: #FBEFD5;
+
+  /* Red is reserved for red flags and open escalations. */
+  --red-700: #B42318;
+  --red-100: #FCE8E6;
+
+  --white-a08: rgb(255 255 255 / 8%);
+  --white-a12: rgb(255 255 255 / 12%);
+  --white-a16: rgb(255 255 255 / 16%);
+  --white-a20: rgb(255 255 255 / 20%);
+  --white-a25: rgb(255 255 255 / 25%);
+  --white-a35: rgb(255 255 255 / 35%);
+  --white-a60: rgb(255 255 255 / 60%);
+  --marigold-a16: rgb(244 182 63 / 16%);
+  --marigold-a35: rgb(244 182 63 / 35%);
+  --overlay: rgb(30 15 46 / 62%);
+  --shadow-1: 0 1px 2px rgb(34 22 58 / 8%);
+  --shadow-2: 0 12px 32px rgb(34 22 58 / 14%);
+  --shadow-3: 0 28px 64px rgb(30 15 46 / 30%);
+  --orb-glow: 0 0 0 10px rgb(244 182 63 / 14%), 0 18px 48px rgb(244 182 63 / 38%);
+
+  /* Bricolage carries headings and times in UI chrome. Patient-language text stays in Noto Sans,
+     which covers the Hausa hooked letters; Bricolage falls back to Noto Sans glyph by glyph. */
+  --font-body: 'Noto Sans', 'Segoe UI', Arial, sans-serif;
+  --font-display: 'Bricolage Grotesque Variable', 'Bricolage Grotesque', 'Noto Sans', sans-serif;
+
+  /* Type scale: major third (1.25) from 16px. */
+  --text-xs: 0.8125rem;
+  --text-sm: 0.875rem;
+  --text-md: 1rem;
+  --text-lg: 1.25rem;
+  --text-xl: 1.5625rem;
+  --text-2xl: 1.953rem;
+  --text-3xl: 2.441rem;
+  --text-4xl: 3.052rem;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+
+  /* Radius follows hierarchy: controls are tight, sheets are soft, the loop and Tomi are round. */
+  --radius-sm: 6px;
+  --radius-md: 12px;
+  --radius-lg: 20px;
+  --radius-xl: 32px;
+  --radius-round: 999px;
+
+  --tap: 52px;
+  --tap-min: 44px;
+  --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+}

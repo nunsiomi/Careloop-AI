@@ -1,0 +1,50 @@
+/* Landing: one purple hero with the loop, then plain reading on paper. */
+
+.landing-hero { position: relative; display: grid; align-content: start; gap: var(--space-5); padding: var(--space-6) max(var(--space-5), calc((100% - 1080px) / 2)) var(--space-12); overflow: hidden; background: var(--aubergine-950); color: var(--white); }
+.landing-hero :focus-visible { outline-color: var(--marigold-400); }
+.landing-brand { position: relative; display: flex; align-items: center; gap: var(--space-3); font-family: var(--font-display); font-size: var(--text-xl); font-weight: 700; letter-spacing: -0.02em; }
+.landing-brand .logo-mark { color: var(--purple-300); }
+.landing-hero .loop-art { position: absolute; top: -40px; right: -140px; width: 420px; height: 420px; transform: rotate(14deg); }
+.landing-hero h1 { position: relative; max-width: 15ch; margin-top: var(--space-10); font-size: clamp(var(--text-3xl), 6vw, 4rem); font-weight: 750; line-height: 0.98; letter-spacing: -0.04em; font-variation-settings: 'wdth' 84; }
+.landing-lede { position: relative; max-width: 54ch; color: var(--purple-200); font-size: var(--text-lg); line-height: 1.5; }
+
+.landing-doors { position: relative; display: grid; gap: var(--space-3); margin-top: var(--space-6); }
+.door { display: grid; align-content: start; gap: var(--space-2); min-height: 132px; padding: var(--space-5); border: 1.5px solid var(--white-a25); border-radius: var(--radius-lg); background: var(--white-a08); color: var(--white); text-decoration: none; transition: background-color 150ms var(--ease), border-color 150ms var(--ease); }
+.door:hover { border-color: var(--purple-300); background: var(--white-a12); }
+.door-title { font-family: var(--font-display); font-size: var(--text-xl); font-weight: 700; line-height: 1.15; letter-spacing: -0.015em; }
+.door-copy { color: var(--purple-200); }
+.door-patient { border-color: var(--purple-500); background: var(--purple-700); }
+.door-patient:hover { background: var(--purple-600); }
+.door-patient .door-copy { color: var(--purple-100); }
+
+.landing-main { width: min(100% - var(--space-8), 1080px); margin: 0 auto; padding: var(--space-4) 0 var(--space-16); }
+.landing-section { display: grid; gap: var(--space-5); margin-top: var(--space-12); }
+.landing-section h2 { max-width: 22ch; font-size: var(--text-2xl); font-weight: 700; letter-spacing: -0.025em; }
+
+/* A true sequence, so it is numbered. */
+.flow { display: grid; list-style: none; counter-reset: flow; }
+.flow li { position: relative; display: grid; gap: var(--space-1); max-width: 64ch; padding: 0 0 var(--space-6) var(--space-12); counter-increment: flow; }
+.flow li::before { content: counter(flow); position: absolute; top: -2px; left: 0; display: grid; width: 32px; height: 32px; place-items: center; border-radius: var(--radius-round); background: var(--purple-700); color: var(--white); font-family: var(--font-display); font-weight: 700; }
+.flow li::after { content: ''; position: absolute; top: 34px; bottom: 2px; left: 15px; width: 2px; background: var(--purple-200); }
+.flow li:last-child::after { display: none; }
+.flow li:nth-child(5)::before { background: var(--marigold-400); color: var(--ink-900); }
+.flow h3 { font-family: var(--font-body); font-size: var(--text-md); font-weight: 700; letter-spacing: 0; }
+.flow p { color: var(--ink-700); }
+
+.channels { display: grid; gap: var(--space-3); list-style: none; }
+.channel { display: grid; align-content: start; gap: var(--space-2); padding: var(--space-5); border-radius: var(--radius-lg); background: var(--white); }
+.channel svg { color: var(--purple-600); }
+.channel h3 { font-size: var(--text-lg); }
+.channel p { color: var(--ink-700); }
+
+.landing-note { margin-top: var(--space-12); color: var(--ink-600); font-size: var(--text-sm); }
+
+@media (min-width: 720px) {
+  .landing-doors { grid-template-columns: repeat(2, minmax(0, 1fr)); max-width: 820px; }
+  .channels { grid-template-columns: repeat(2, 1fr); }
+  .landing-hero .loop-art { top: 20px; right: max(-120px, calc((100% - 1260px) / 2)); width: 520px; height: 520px; }
+}
+
+@media (min-width: 1024px) {
+  .channels { grid-template-columns: repeat(4, 1fr); }
+}
