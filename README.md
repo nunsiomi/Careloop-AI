@@ -38,7 +38,7 @@ Runs on in-browser mock data by default. Add `?mock=0` to a URL to call FastAPI 
 (Vite proxies `/api`). API contract for the backend: `docs/api_shapes.md`.
 
 ## Team preview (Vercel)
-Import the GitHub repo into Vercel and keep the defaults: `vercel.json` builds `frontend/` and serves `frontend/dist`.
+Import the GitHub repo into Vercel and set **Root Directory** to `frontend`. `frontend/vercel.json` does the rest (`npm ci`, `npm run build`, serves `dist`).
 The preview runs on in-browser data only, so it needs no backend or secrets. It is marked `noindex`.
 
 ## Branches

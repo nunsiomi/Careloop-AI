@@ -2,7 +2,7 @@
 
 ## Frontend rules
 
-- The frontend is React + Vite in `frontend/` (decided by Nunsi, 30 Oct 2026; replaces the plain HTML/JS rule). Run `npm run dev` there; `npm run build` writes `frontend/dist/`, which FastAPI serves as static files. The team preview is deployed to Vercel from `vercel.json` at the repo root (mock data only). Both apps use hash routing, so no server rewrites are needed.
+- The frontend is React + Vite in `frontend/` (decided by Nunsi, 30 Oct 2026; replaces the plain HTML/JS rule). Run `npm run dev` there; `npm run build` writes `frontend/dist/`, which FastAPI serves as static files. The team preview is deployed to Vercel with Root Directory `frontend` and `frontend/vercel.json` (mock data only, Node 20.19 or newer). Both apps use hash routing, so no server rewrites are needed.
 - `frontend/_legacy/` is the old plain HTML/JS version, kept for reference only. Do not edit it or import from it.
 - Structure: `index.html` + `landing.jsx` (landing), `patient/` (patient app), `clinician/` (dashboard), `shared/` (API, mocks, tokens, shared components). Ask Nunsi before adding a new page, a top-level folder, or an npm dependency.
 - Define all colours, spacing, radii and fonts as CSS variables in `shared/tokens.css`. Do not use hex or rgb colour values in any other file (the only exception is `public/favicon.svg`).

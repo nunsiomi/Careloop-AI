@@ -17,8 +17,8 @@ frontend/
 - Every network call goes through `shared/api.js`. `USE_MOCKS` is on by default. The mocks keep data in the browser's
   local storage, stand in for the backend agents, and follow `docs/api_shapes.md`. `?mock=0` sends calls to FastAPI
   under `/api`.
-- Builds to `frontend/dist/`, which FastAPI serves in production. The team preview is deployed on Vercel from
-  `vercel.json`.
+- Builds to `frontend/dist/`, which FastAPI serves in production. The team preview is deployed on Vercel with
+  Root Directory `frontend` (`frontend/vercel.json`).
 
 ## Changes since documentation v2.1
 
