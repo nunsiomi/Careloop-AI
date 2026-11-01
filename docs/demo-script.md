@@ -32,7 +32,8 @@ Add `?presenter=1` to any URL to show sign-in details on each screen and tools t
   | Weaverbird Medical Centre, Enugu | `WMC-2738` |
   | Heron Bay General Hospital, Lagos | `HBG-6409` |
 
-  Five wrong codes block sign-up for 10 minutes. The sample patients appear under the hospital you chose.
+  You don't need to remember these: once you pick a hospital, the sign-up page shows its code with an MVP notice
+  and a **Use this code** button. Five wrong codes block sign-up for 10 minutes. The sample patients appear under the hospital you chose.
 - Staff invite link: `/clinician/#/join/join-7f3k` (Bisi Ola, follow-up nurse).
 
 **Patients and family helpers**

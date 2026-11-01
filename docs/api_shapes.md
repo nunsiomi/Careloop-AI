@@ -205,7 +205,7 @@ StaffSession: { "id": "ss_...", "user": { "id": "u-ada", "name": "Dr. Ada Okafor
 | `staffSignIn(body)` | `POST /auth/staff/sign-in` | `{ email, password }` | `{ mfa_token, masked_email, resend_in }` and emails a code; 401 generic message, 429 locked |
 | `resendStaffMfaEmail(body)` | `POST /auth/staff/mfa/email` | `{ mfa_token }` | `{ resend_in }` |
 | `verifyStaffMfa(body)` | `POST /auth/staff/mfa` | `{ mfa_token, code, remember_device }` | `{ session }`; 401 wrong code, 410 timed out, 429 too many |
-| `listFacilities()` | `GET /facilities` | | `{ facilities: [{ id, name, city }], roles: string[] }` |
+| `listFacilities()` | `GET /facilities` | | `{ facilities: [{ id, name, city }], roles: string[] }`. The mock adds `demo_join_code` to each hospital for the MVP notice on sign-up; the real backend must never return it. |
 | `staffSignUp(body)` | `POST /auth/staff/sign-up` | `{ name, email, password, facility_id, join_code, role, confirmed }` | `{ signup_token, masked_email, resend_in }` and emails a 6-digit code; 403 wrong join code, 429 too many |
 | `resendSignUpCode(body)` | `POST /auth/staff/sign-up/resend` | `{ signup_token }` | `{ resend_in }`; 429 too soon |
 | `verifySignUpEmail(body)` | `POST /auth/staff/sign-up/verify` | `{ signup_token, code }` | `{ session }`; 401 wrong code, 410 expired |

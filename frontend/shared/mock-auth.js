@@ -386,7 +386,8 @@ export const authMock = {
   },
 
   /* Self sign-up: any email address, a hospital from the list, then email check and two-step setup. */
-  async listFacilities() { return ok({ facilities: FACILITIES.map(({ join_code, ...facility }) => facility), roles: STAFF_ROLES }, 120); },
+  // demo_join_code is mock-only, so testers can sign up without a hospital admin. The real backend never returns join codes.
+  async listFacilities() { return ok({ facilities: FACILITIES.map(({ join_code, ...facility }) => ({ ...facility, demo_join_code: join_code })), roles: STAFF_ROLES }, 120); },
 
   async staffSignUp({ name, email, password, facility_id, join_code, role, confirmed }) {
     const cleanEmail = String(email || '').trim().toLowerCase();

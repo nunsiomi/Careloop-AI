@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Check, Lock, ShieldCheck } from 'lucide-react';
+import { ArrowLeft, Check, Info, Lock, ShieldCheck } from 'lucide-react';
 import { CareLoopAPI } from '../shared/api.js';
 import { clock, CodeInput, IncomingMessage, PasswordField, PresenterNote, useCountdown } from '../shared/auth-ui.jsx';
 import LoopArt from '../shared/LoopArt.jsx';
@@ -362,6 +362,18 @@ export function SignUp({ onSignedIn }) {
             ? <p id="signup-join-code-error" className="field-error" role="alert">{error.message}</p>
             : <p id="signup-join-code-hint" className="hint">Only staff with this code can join {chosen ? chosen.name : 'your hospital'}.</p>}
         </div>
+        {chosen?.demo_join_code && (
+          <aside className="mvp-code" aria-labelledby="mvp-code-title">
+            <Info aria-hidden="true" size={20} />
+            <div>
+              <p id="mvp-code-title" className="mvp-code-title">Code for {chosen.name}: <strong className="mono-ish">{chosen.demo_join_code}</strong></p>
+              <p>You can see this code because CareLoop is an MVP, so anyone can try it. In real use, the hospital or care facility gives this code only to its own staff.</p>
+              {form.join_code !== chosen.demo_join_code && (
+                <button type="button" className="btn btn-secondary" onClick={() => { set('join_code')(chosen.demo_join_code); setError(null); }}>Use this code</button>
+              )}
+            </div>
+          </aside>
+        )}
         <div className="field">
           <label htmlFor="signup-role">Your role</label>
           <select id="signup-role" className="select input-lg" value={form.role} onChange={(event) => set('role')(event.target.value)} disabled={!roles.length}>
@@ -380,7 +392,6 @@ export function SignUp({ onSignedIn }) {
         <button type="submit" className="btn btn-primary btn-lg btn-block" disabled={busy || !ready}>{busy ? 'Creating account…' : 'Create account'}</button>
       </form>
       <p className="staff-switch">Already have an account? <Link to="/sign-in">Sign in</Link></p>
-      <PresenterNote items={[['Kestrel General', 'KGH-4821'], ['Egret Teaching', 'ETH-3067'], ['Hornbill Specialist', 'HSH-5914'], ['Weaverbird Medical Centre', 'WMC-2738'], ['Heron Bay General', 'HBG-6409']]} />
     </AuthFrame>
   );
 }

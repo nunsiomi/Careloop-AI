@@ -497,3 +497,10 @@ code { padding: 1px var(--space-1); border-radius: var(--radius-sm); background:
   .dash.has-assistant { grid-template-columns: 1fr; }
   .assistant-launcher { right: var(--space-4); bottom: var(--space-4); }
 }
+
+/* MVP only: the selected hospital's join code, shown so anyone can try sign-up. */
+.mvp-code { display: flex; gap: var(--space-3); padding: var(--space-4); border: 1.5px dashed var(--purple-300); border-radius: var(--radius-md); background: var(--purple-100); color: var(--ink-700); font-size: var(--text-sm); }
+.mvp-code > svg { flex: 0 0 auto; color: var(--purple-700); }
+.mvp-code > div { display: grid; gap: var(--space-2); justify-items: start; }
+.mvp-code-title { color: var(--ink-900); font-size: var(--text-md); }
+.mvp-code-title strong { color: var(--purple-700); }
