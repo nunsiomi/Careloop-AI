@@ -1,9 +1,9 @@
-"""Plan Verifier Agent: source note + plan JSON -> field diff and verdict (owner: Mary).
 
-Returns structured findings or proposed actions only. Never writes care records
-directly; the orchestrator validates and invokes approved tools.
-"""
-
-
-async def run(payload: dict) -> dict:
-    raise NotImplementedError
+def plan_verifier(note, plan):
+  issues = []
+  for med in plan["medications"]:
+    if med["dose"] is None:
+      issues.append("dose missing for: " + med["text"])
+  if len(plan["appointments"]) == 0  and "appointment" in note.lower():
+    issues.append("appointment in note but not in plan")
+  return {"verdict": "flagged" if issues else "clean", "issues": issues}
