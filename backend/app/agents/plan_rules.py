@@ -21,11 +21,21 @@ NUMBER_WORDS = {
 STRENGTH = re.compile(r"(\d+(?:\.\d+)?)\s*(mg|mcg|g|ml|iu|units?)\b", re.I)
 MEDICINE_LINE = re.compile(r"\b(tablets?|capsules?|injections?|syrup|inhaler|cream|drops|suspension)\b|" + STRENGTH.pattern, re.I)
 CLOCK = re.compile(r"\b([01]?\d|2[0-3]):([0-5]\d)\b")
-LEADING_VERBS = {"continue", "start", "restart", "take", "give", "stop"}
+AM_PM = re.compile(r"\b(1[0-2]|0?[1-9])(?:[:.]([0-5]\d))?\s*(am|pm)\b", re.I)
+FRACTION = re.compile(r"(?<![\d/])(\d)/(\d)(?![\d/])|½")
+# Words before a medicine's name: verbs, and the dosage-form abbreviations notes often start with ("Tab. Amlodipine")
+LEADING_VERBS = {"continue", "start", "restart", "take", "give", "stop", "tab", "tabs", "tablet", "cap", "caps", "capsule",
+                 "inj", "injection", "syr", "syrup", "susp", "suspension", "t", "c"}
+# Standard prescription abbreviations, expanded only for comparing (the note's own words are what gets quoted)
+ABBREVIATIONS = {"od": "once daily", "bd": "twice daily", "bid": "twice daily", "tds": "three times daily", "tid": "three times daily",
+                 "qds": "four times daily", "qid": "four times daily", "nocte": "at night", "mane": "in the morning", "prn": "as needed",
+                 "tab": "tablet", "tabs": "tablets", "cap": "capsule", "caps": "capsules"}
+FREQUENCY_COUNTS = {"once": 1, "twice": 2, "three times": 3, "four times": 4}
 UNCLEAR_USE = re.compile(r"\b(as directed|as needed|when required|prn|as before|as usual)\b", re.I)
 VAGUE_DATE = re.compile(r"\b(next week|next month|soon|later|in a few days|as soon as possible)\b", re.I)
 RELATIVE_DATE = re.compile(r"\b(in|within)\s+(\d+|" + "|".join(NUMBER_WORDS) + r")\s+(days?|weeks?)\b", re.I)
-WRITTEN_DATE = re.compile(r"\b(\d{1,2})\s+([A-Za-z]{3,9})\s+(\d{4})\b|\b(\d{4})-(\d{2})-(\d{2})\b|\b(\d{1,2})/(\d{1,2})/(\d{4})\b")
+DAY_MONTH = re.compile(r"\b(\d{1,2})(?:st|nd|rd|th)?\s+(?:of\s+)?([A-Za-z]{3,9})\b(?!,?\s+\d{4})")
+WRITTEN_DATE = re.compile(r"\b(\d{1,2})(?:st|nd|rd|th)?\s+(?:of\s+)?([A-Za-z]{3,9}),?\s+(\d{4})\b|\b(\d{4})-(\d{2})-(\d{2})\b|\b(\d{1,2})/(\d{1,2})/(\d{4})\b")
 DISCHARGE_DATE = re.compile(r"discharge date:?\s*(.+)", re.I)
 MONTHS = {name: number for number, names in enumerate(
     [("jan", "january"), ("feb", "february"), ("mar", "march"), ("apr", "april"), ("may",), ("jun", "june"),
@@ -50,13 +60,24 @@ def _words(text: str) -> set[str]:
     return {word for word in re.findall(r"[a-z]+", text.lower()) if len(word) >= 4 and word not in STOP_WORDS}
 
 
+def expand(text: str) -> str:
+    """'1 tab bd' -> '1 tablet twice daily', for comparing only."""
+    return re.sub(r"\b(" + "|".join(ABBREVIATIONS) + r")\b\.?", lambda match: ABBREVIATIONS[match.group(1).lower()], text, flags=re.I)
+
+
 def _plain_words(text: str) -> set[str]:
-    return {word for word in re.findall(r"[a-z]+", text.lower()) if len(word) >= 3} - {"every", "with", "take", "the", "and"}
+    return {word for word in re.findall(r"[a-z]+", text.lower()) if len(word) >= 3} - {"every", "with", "take", "the", "and", "daily", "times", "day"}
+
+
+def _frequency_count(text: str) -> int | None:
+    lower = text.lower()
+    return next((count for words, count in FREQUENCY_COUNTS.items() if re.search(rf"\b{words}\b", lower)), None)
 
 
 def _numbers(text: str) -> set[str]:
     """Numbers in a piece of text, with number words turned into digits and clock times left out."""
-    text = CLOCK.sub(" ", text.lower())
+    text = AM_PM.sub(" ", CLOCK.sub(" ", text.lower()))
+    text = FRACTION.sub(lambda match: str(int(match.group(1)) / int(match.group(2))) if match.group(1) else "0.5", text)
     text = re.sub(r"\b(" + "|".join(NUMBER_WORDS) + r")\b", lambda match: NUMBER_WORDS[match.group(1)], text)
     return {str(float(value)) for value in re.findall(r"\d+(?:\.\d+)?", text)}
 
@@ -66,7 +87,10 @@ def _strengths(text: str) -> set[str]:
 
 
 def _clock_times(text: str) -> set[str]:
-    return {f"{int(hour):02d}:{minute}" for hour, minute in CLOCK.findall(text)}
+    times = {f"{int(hour):02d}:{minute}" for hour, minute in CLOCK.findall(text)}
+    for hour, minute, half in AM_PM.findall(text):
+        times.add(f"{int(hour) % 12 + (12 if half.lower() == 'pm' else 0):02d}:{minute or '00'}")
+    return times
 
 
 def _note_lines(note: str) -> list[str]:
@@ -102,9 +126,20 @@ def _parse_date(day: int, month: int, year: int) -> date | None:
         return None
 
 
-def _written_dates(text: str) -> tuple[list[date], list[str]]:
-    """Valid dates written in the text, and date-like strings that are not real dates (e.g. 31 November)."""
+def _written_dates(text: str, default_year: int | None = None) -> tuple[list[date], list[str]]:
+    """Valid dates written in the text, and date-like strings that are not real dates (e.g. 31 November).
+    A day and month without a year ("10th November") takes the discharge year."""
     valid, invalid = [], []
+    if default_year:
+        for match in DAY_MONTH.finditer(text):
+            month = MONTHS.get(match.group(2).lower())
+            if not month:
+                continue
+            parsed = _parse_date(int(match.group(1)), month, default_year)
+            if parsed:
+                valid.append(parsed)
+            else:
+                invalid.append(match.group(0))
     for match in WRITTEN_DATE.finditer(text):
         if match.group(1):
             month = MONTHS.get(match.group(2).lower())
@@ -133,7 +168,7 @@ def discharge_date(note: str) -> date | None:
 
 
 def _check_date(field: str, plan_date: str, line: str, discharged: date | None, what: str) -> list[Finding]:
-    valid, invalid = _written_dates(line)
+    valid, invalid = _written_dates(line, discharged.year if discharged else None)
     if invalid:
         return [_issue(field, f"The {what} date in the note ({invalid[0]}) is not a real date", "high", invalid[0], bool(plan_date))]
 
@@ -176,6 +211,7 @@ def _check_medicine(index: int, medication, care_lines: list[str]) -> list[Findi
     if not naming:
         return [_issue(f"{field}.name", f"{medication.name or 'This medicine'} is not in the note", "high", invented=True)]
     line = naming[0]
+    seen = expand(line)  # "1 tab bd" read as "1 tablet twice daily"; findings still quote the note's own words
     findings = []
 
     # Strength: must be written, and the same everywhere the note names this medicine
@@ -194,30 +230,33 @@ def _check_medicine(index: int, medication, care_lines: list[str]) -> list[Findi
     # Amount each time
     if not medication.dose:
         findings.append(_issue(f"{field}.dose", "How much to take each time is not stated", "high", line))
-    elif not _numbers(medication.dose) <= _numbers(line):
+    elif not _numbers(medication.dose) <= _numbers(seen):
         findings.append(_issue(f"{field}.dose", f'The dose "{medication.dose}" is not in the note', "high", line, invented=True))
 
     # How often
     unclear = UNCLEAR_USE.search(line)
+    plan_count, note_count = _frequency_count(expand(medication.frequency)), _frequency_count(seen)
     if unclear:
         findings.append(_issue(f"{field}.frequency", "How often to take it is not stated", "high", unclear.group(0), bool(medication.frequency)))
     elif not medication.frequency:
         findings.append(_issue(f"{field}.frequency", "How often to take it is missing from the plan", "high", line))
-    elif not (_plain_words(medication.frequency) & _plain_words(line)):
+    elif plan_count and note_count and plan_count != note_count:
+        findings.append(_issue(f"{field}.frequency", f'"{medication.frequency}" is not how often the note says to take it', "high", line, invented=True))
+    elif not (plan_count and plan_count == note_count) and not (_plain_words(expand(medication.frequency)) & _plain_words(seen)):
         findings.append(_issue(f"{field}.frequency", f'"{medication.frequency}" is not how the note says to take it', "medium", line))
 
     # Reminder times for this medicine
-    written_times = _clock_times(line)
+    written_times = _clock_times(seen)
     extra = [time for time in medication.times if time not in written_times]
     if extra:
         findings.append(_issue(f"{field}.times", f"{', '.join(extra)} is not a time written in the note; confirm it", "medium", line, invented=True))
 
     # Duration
-    if medication.duration and not _numbers(medication.duration) <= _numbers(line):
+    if medication.duration and not _numbers(medication.duration) <= _numbers(seen):
         findings.append(_issue(f"{field}.duration", f'"{medication.duration}" is not the length of treatment in the note', "high", line, invented=True))
 
     # Extra instructions must come from the note
-    if medication.instructions and not _words(medication.instructions) <= _words(line):
+    if medication.instructions and not _words(medication.instructions) <= _words(seen):
         findings.append(_issue(f"{field}.instructions", f'"{medication.instructions}" is not in the note', "medium", line))
     return findings
 

@@ -35,6 +35,7 @@ item, tick it there in the same commit as the work.
 | [docs/architecture.md](docs/architecture.md) | How the frontend is built, and what has changed since documentation v2.1 |
 | [docs/api_shapes.md](docs/api_shapes.md) | API contract the backend must follow (the frontend mocks follow it too) |
 | [voice/README.md](voice/README.md) | Tomi's voice worker: how a call goes, the keys it needs, how to run it |
+| [docs/plan-format.md](docs/plan-format.md) | The care plan's fields, what approval creates, and the decisions behind them |
 | [docs/plan-review-criteria.md](docs/plan-review-criteria.md) | What the plan checks flag, and what a clinician checks before approving a plan |
 | [docs/demo-script.md](docs/demo-script.md) | Click-through for teammates and judges, with every sign-in |
 | [docs/clinical-safety-review.md](docs/clinical-safety-review.md) | Red-flag rules and safety policies for the clinical mentor to review and sign |
@@ -130,6 +131,7 @@ Careloop-AI/
     ├── launch-checklist.md
     ├── architecture.md
     ├── api_shapes.md             API contract (api-contract.md points here)
+    ├── plan-format.md
     ├── plan-review-criteria.md
     ├── demo-script.md
     └── clinical-safety-review.md

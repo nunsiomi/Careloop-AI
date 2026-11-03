@@ -14,7 +14,7 @@ Last updated: 3 Nov 2026
 |---|---|
 | 1. Accounts and keys | 0 / 11 |
 | 2. Backend core | 11 / 13 |
-| 3. Agents | 6 / 9 |
+| 3. Agents | 7 / 9 |
 | 4. Safety | 3 / 5 |
 | 5. Tomi voice | 1 / 6 |
 | 6. Frontend | 5 / 13 |
@@ -98,8 +98,9 @@ All agents call Groq through one shared client, so the model can be changed in o
 - [x] Plan Verifier Agent: flags anything in the draft not found in the note. — Mary (done by Nunsi, 3 Nov 2026:
   rule checks in `agents/plan_rules.py` always run, then a model pass; review rules in `docs/plan-review-criteria.md`;
   notebook `notebooks/care_plan_verifier.ipynb`)
-- [ ] Mary reviews the plan agents, the seeded notes and `docs/plan-review-criteria.md`, and agrees the plan
-  schema (`backend/app/models.py`) with Olamide. — Mary
+- [x] Mary reviews the plan agents, the seeded notes and `docs/plan-review-criteria.md`, and agrees the plan
+  schema (`backend/app/models.py`) with Olamide. — Mary (done by Nunsi, 3 Nov 2026: agents re-run on six notes with
+  Groq, shorthand false alarms fixed, plan format and its six decisions recorded in `docs/plan-format.md`)
 - [x] Check-in Agent: Tomi's daily check-ins in chat. — Dorcas
   (done by Nunsi, 3 Nov 2026: wired into chat in `services/chat.py`; marking a task done waits for the patient's "yes", and its replies
   pass the number check and an advice guard or a fixed line is sent. Run with Groq, including a Hausa message)
