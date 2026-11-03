@@ -51,7 +51,8 @@ def render(template: str, patient: dict, channel: str) -> tuple[str, str]:
     """(subject, body) for one message. Email gets a link back to the app; SMS stays short."""
     title, body = TEMPLATES[template]
     settings = _settings()
-    text = body.format(first=patient["name"].split()[0], facility=settings["facility"], tomi_line=settings["tomi_line"])
+    facility = patient.get("facility") or settings["facility"]
+    text = body.format(first=patient["name"].split()[0], facility=facility, tomi_line=settings["tomi_line"])
     if channel == "email":
         text = f"{text}\n\nOpen CareLoop: {settings['app_url']}\n\nThis email never says what your medicine is for. You can turn email reminders off in the app."
     return (EMAIL_SUBJECT if channel == "email" else title), text

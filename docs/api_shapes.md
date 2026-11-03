@@ -272,7 +272,7 @@ The mock adds `demo_code` to challenges, `demo_link` to reset responses and `dem
 
 In the real system, `createVoiceSession` returns a short-lived LiveKit token. The browser joins the room, and the Tomi worker (`voice/tomi_agent.py`) handles audio, Spitch speech-to-text and text-to-speech, and turn-taking. The patient is already signed in, so browser voice has no PIN check (phone calls do). Turns reach the backend as normalized voice events (doc section 22.2).
 
-Until the backend exists, `frontend/api/voice/sessions.js` issues that token: a Vercel function on the preview, served by Vite during `npm run dev`. It needs `LIVEKIT_URL`, `LIVEKIT_API_KEY` and `LIVEKIT_API_SECRET` (root `.env` locally, Vercel project settings on the preview) and answers `503` without them. The token asks LiveKit to dispatch the agent `tomi` with job metadata `{ "patient_id", "language" }`. Body: `{ patient_id, language }`. Response: `{ session: { id, mode: "livekit", url, token, language } }`. The real backend must check the patient's session before issuing a token; this stand-in does not.
+Until the backend exists, `frontend/api/voice/sessions.js` issues that token: a Vercel function on the preview, served by Vite during `npm run dev`. It needs `LIVEKIT_URL`, `LIVEKIT_API_KEY` and `LIVEKIT_API_SECRET` (root `.env` locally, Vercel project settings on the preview) and answers `503` without them. The token asks LiveKit to dispatch the agent `tomi` with job metadata `{ "patient_id", "language" }`. Body: `{ patient_id, language }`. Response: `{ session: { id, mode: "livekit", url, token, language } }`. The backend's own `POST /voice/sessions` issues the same token after checking the patient's session; this stand-in does not.
 
 With mocks on, `createVoiceSession` tries that route first and falls back to the scripted mock session if it is not set up (`?voice=mock` forces the script). The voice sheet then joins the room through `shared/live-voice.js` (`livekit-client`): microphone in, Tomi's audio out, captions from the `lk.transcription` text stream, Tomi's state from the agent's `lk.agent.state` attribute, and the emergency button when the agent sets `careloop.escalation` to `open`.
 
@@ -281,7 +281,8 @@ The scripted mock session uses `sendVoiceInput`, a dialog driven by keypad press
 ## Voice worker *(added; used by `voice/tomi_agent.py`, not by the browser)*
 
 The Tomi worker calls these with `Authorization: Bearer <VOICE_SERVICE_TOKEN>`, a service token that can only
-use these routes. Until they exist, the worker runs on its own mock (`VOICE_USE_MOCKS=1`, `voice/backend_client.py`).
+use these routes (built in `backend/app/routes/voice.py`). Set `VOICE_USE_MOCKS=0` to use them; with `1` the worker
+runs on its own mock (`voice/backend_client.py`).
 Outgoing calls: `POST /calls/outbound` dispatches the LiveKit agent `tomi` with job metadata
 `{ "call_id", "patient_id", "phone_e164" }`. Browser voice tokens carry the participant attribute `careloop.patient_id`.
 

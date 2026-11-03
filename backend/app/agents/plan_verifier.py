@@ -18,7 +18,7 @@ from groq import GroqError
 from pydantic import BaseModel, ValidationError
 
 from app.agents import plan_rules
-from app.agents.care_plan import ask_groq_json
+from app.agents.llm import ask_groq_json
 from app.models import PlanDraft, PlanIssue, VerifierResult
 
 PROMPT_PATH = Path(__file__).parent / "prompts" / "plan_verifier_prompt.md"

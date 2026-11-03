@@ -13,10 +13,10 @@ Last updated: 3 Nov 2026
 | Section | Done |
 |---|---|
 | 1. Accounts and keys | 0 / 11 |
-| 2. Backend core | 1 / 13 |
-| 3. Agents | 2 / 9 |
+| 2. Backend core | 11 / 13 |
+| 3. Agents | 3 / 9 |
 | 4. Safety | 0 / 5 |
-| 5. Tomi voice | 0 / 6 |
+| 5. Tomi voice | 1 / 6 |
 | 6. Frontend | 5 / 13 |
 | 7. Deploy | 1 / 7 |
 | 8. Clinical and team sign-off | 1 / 6 |
@@ -51,38 +51,48 @@ Optional: a domain (`.com` is quickest; `.ng` needs NiRA paperwork) for a proper
 
 The contract is `docs/api_shapes.md`. Each route should return exactly what the frontend mock returns today.
 
-- [ ] Database models: hospitals, staff, patients, caregivers, invites, plans, tasks, events, appointments,
-  escalations, calls, notifications. — Olamide
+- [x] Database models: hospitals, staff, patients, caregivers, invites, plans, tasks, events, appointments,
+  escalations, calls, notifications. — Olamide (done by Nunsi, 3 Nov 2026: `backend/app/db.py`, one JSON record table on
+  SQLite or Postgres; plan contract in `models.py`. Runs as one backend process)
 - [x] Seed data: `data/synthetic_patients.json`, `data/resources.json`, sample discharge notes in `data/sample_discharges/`. — Mary
   (done by Nunsi, 3 Nov 2026: five patients matching the frontend mock, five barrier contacts, five notes with
   seeded dose and date errors plus `expected.json`)
-- [ ] Plan flow in the orchestrator: on `POST /patients`, run the Care Plan Agent then the Plan Verifier, store the
+- [x] Plan flow in the orchestrator: on `POST /patients`, run the Care Plan Agent then the Plan Verifier, store the
   verifier's `issues` as `verifier_issues`, and never send a plan while `deliverable` is false or before a
   clinician approves (`docs/api_shapes.md`, "Plan"). — Olamide
-- [ ] Patient sign-in: code by email (to the address on the account, never shown) or voice call, PIN on a remembered
-  phone, invite codes that collect the person's email, caregivers. SMS codes later. — Olamide
-- [ ] Staff sign-in: password, 6-digit email code, password reset, idle lock. — Olamide
-- [ ] Staff sign-up with hospital join code (lockout after 5 wrong codes), invite links. Never return `demo_join_code`. — Olamide
-- [ ] Sessions in httpOnly cookies, rate limits on every code and PIN route. — Olamide
-- [ ] Patient routes: today, tasks, plan, chat, appointments, account and consent settings. — Olamide
-- [ ] Dashboard routes: overview, patients, profile, plan review, appointments, reminders, escalations. — Olamide
-- [ ] Reminder scheduler: 30 minutes before each task, 18:00 before a visit, nothing 21:00–07:00,
+  (done by Nunsi, 3 Nov 2026: `services/plans.py`; approval creates the tasks and visits, and emails the patient an invite)
+- [x] Patient sign-in: code by email (to the address on the account, never shown) or voice call, PIN on a remembered
+  phone, invite codes that collect the person's email, caregivers. SMS codes later. — Olamide (done by Nunsi, 3 Nov 2026; codes by phone call
+  answer 503 until there is telephony)
+- [x] Staff sign-in: password, 6-digit email code, password reset, idle lock. — Olamide (done by Nunsi, 3 Nov 2026)
+- [x] Staff sign-up with hospital join code (lockout after 5 wrong codes), invite links. Never return `demo_join_code`. — Olamide
+  (done by Nunsi, 3 Nov 2026)
+- [x] Sessions in httpOnly cookies, rate limits on every code and PIN route. — Olamide (done by Nunsi, 3 Nov 2026; tokens stored hashed,
+  passwords and PINs with scrypt, codes with HMAC; rate limits are in memory)
+- [x] Patient routes: today, tasks, plan, chat, appointments, account and consent settings. — Olamide (done by Nunsi, 3 Nov 2026)
+- [x] Dashboard routes: overview, patients, profile, plan review, appointments, reminders, escalations. — Olamide
+  (done by Nunsi, 3 Nov 2026; every field the app reads checked against the mock)
+- [x] Reminder scheduler: 30 minutes before each task, 18:00 before a visit, nothing 21:00–07:00,
   consent checked at send time, retries. — Olamide
   Rules written 3 Nov 2026 (`services/notifications.py`: `plan_reminders`, `dispatch`, `send_sign_in_code`, with
-  tests); still to do: the APScheduler job that stores reminders and runs `dispatch` when they are due.
+  tests); APScheduler job every 30 s in `scheduler.py` (done by Nunsi, 3 Nov 2026): sends due reminders, marks tasks overdue
+  2 hours after they were due (never treated as a missed dose), clears expired codes.
 - [ ] Provider adapters for SMS, email and calls, with signed delivery-report webhooks. — Olamide
   Email adapter written 3 Nov 2026 (`adapters/email.py`, SMTP or console); SMS stays off (`adapters/sms.py`) until
   there is a provider. Calls and webhooks still to do.
-- [ ] Each staff account sees only its own hospital's patients (checked on every route). — Olamide
+- [x] Each staff account sees only its own hospital's patients (checked on every route). — Olamide (done by Nunsi, 3 Nov 2026;
+  tested with a second facility)
 - [ ] Tests: the acceptance tests in section 17 of the project documentation. — All
-  Care plan integrity done 3 Nov 2026 (`backend/tests/test_plan_verifier.py`, `test_care_plan.py`); the other
-  areas are still to write.
+  Done 3 Nov 2026: care plan integrity (`test_plan_verifier.py`, `test_care_plan.py`) and verification (a shared
+  phone or wrong PIN reveals nothing, `test_api.py`). Still to write: voice languages, red flags per language,
+  event provenance.
 
 ## 3. Agents (Groq)
 
 All agents call Groq through one shared client, so the model can be changed in one place.
 
-- [ ] Shared Groq client: model from `GROQ_MODEL`, timeouts, retries, JSON output checked against a schema. — Olamide
+- [x] Shared Groq client: model from `GROQ_MODEL`, timeouts, retries, JSON output checked against a schema. — Olamide
+  (done by Nunsi, 3 Nov 2026: `agents/llm.py`, used by the plan agents; move the Check-in Agent onto it with Dorcas)
 - [x] Care Plan Agent: discharge note → draft plan for clinician review. — Mary (done by Nunsi, 3 Nov 2026:
   `agents/care_plan.py`; removes anything the note does not support; run on the five sample notes with Groq)
 - [x] Plan Verifier Agent: flags anything in the draft not found in the note. — Mary (done by Nunsi, 3 Nov 2026:
@@ -113,7 +123,9 @@ All agents call Groq through one shared client, so the model can be changed in o
   Spitch and Groq keys (`python tomi_agent.py console`).
 - [ ] `voice/call_controller.py`: call states, keypad fallback, PIN check, consent prompt. — Nunsi
   Code and tests written 2 Nov 2026; tick after the first real phone call.
-- [ ] Backend routes for the voice worker (`docs/api_shapes.md`, "Voice worker"), then `VOICE_USE_MOCKS=0`. — Olamide
+- [x] Backend routes for the voice worker (`docs/api_shapes.md`, "Voice worker"), then `VOICE_USE_MOCKS=0`. — Olamide
+  (done by Nunsi, 3 Nov 2026; tested over HTTP. Set `VOICE_USE_MOCKS=0` and the same `VOICE_SERVICE_TOKEN` in both when you run
+  them together)
 - [ ] Incoming calls: patient rings the Tomi number. — Nunsi
 - [ ] Outgoing calls: scheduled check-ins and the dashboard's "Call patient". — Nunsi
 - [ ] Prompts in all four languages checked by native speakers (`voice/prompts/lines.json`; Hausa, Yoruba and

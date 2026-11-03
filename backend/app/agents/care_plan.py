@@ -9,40 +9,21 @@ match it). Whatever is missing or unclear comes back as `unresolved`, and any hi
 plan from being delivered until the clinician fixes it and approves.
 """
 
-import json
 import os
 import re
 from pathlib import Path
 from typing import Any
 
-from groq import AsyncGroq, GroqError
+from groq import GroqError
 from pydantic import ValidationError
 
 from app.agents import plan_rules
+from app.agents.llm import ask_groq_json
 from app.models import CarePlanResult, PlanDraft, PlanIssue
 
 PROMPT_PATH = Path(__file__).parent / "prompts" / "care_plan_prompt.md"
 FIELD_PATH = re.compile(r"^(medications|appointments|tests)\[(\d+)\]\.(\w+)$")
 MAX_ATTEMPTS = 2
-
-
-async def ask_groq_json(system_prompt: str, user_content: str) -> dict[str, Any]:
-    """One Groq call that must return a JSON object. Shared by the Care Plan Agent and the Plan Verifier
-    (move to the shared Groq client once it exists; launch checklist, section 3)."""
-    api_key = os.getenv("GROQ_API_KEY")
-    if not api_key:
-        raise ValueError("GROQ_API_KEY environment variable is missing or empty.")
-    client = AsyncGroq(api_key=api_key, timeout=30)
-    response = await client.chat.completions.create(
-        model=os.getenv("GROQ_MODEL", "openai/gpt-oss-120b"),
-        messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": user_content}],
-        response_format={"type": "json_object"},
-        temperature=0,
-    )
-    data = json.loads(response.choices[0].message.content or "")
-    if not isinstance(data, dict):
-        raise ValueError("model did not return a JSON object")
-    return data
 
 
 def _ground(note: str, plan: PlanDraft) -> PlanDraft:

@@ -13,9 +13,13 @@ Team: Dorcas, Nunsi, Olamide, Mary.
   dashboard, the Clinician Assistant, and sign-in for patients and staff.
 - **Tomi voice worker: written, not yet run with real keys.** `voice/` holds a LiveKit worker built from
   [Tech-sis123/agricall](https://github.com/Tech-sis123/agricall) (used with permission). It runs on its own
-  sample patient until the backend exists. See [voice/README.md](voice/README.md).
-- **Backend and agents: not built yet.** The files in `backend/` are placeholders. The frontend and the voice
-  worker already define the API the backend must provide (`docs/api_shapes.md`).
+  sample patient until it is pointed at the backend (`VOICE_USE_MOCKS=0`). See [voice/README.md](voice/README.md).
+- **Backend: built, not yet deployed.** FastAPI in `backend/` serves every route in `docs/api_shapes.md`: sign-in
+  with email codes, patients, plans (Care Plan Agent and Plan Verifier), chat, visits, email reminders,
+  escalations, the Clinician Assistant and the Tomi worker's routes. It starts with the same sample facility as
+  the mock. Open the app with `?mock=0` to use it.
+- **Agents:** Care Plan Agent and Plan Verifier done; Check-in Agent merged, not yet wired into chat (chat uses
+  fixed approved replies and the placeholder safety terms until Dorcas's rules are in).
 - **AI models:** Groq (`GROQ_API_KEY`), not the Claude API.
 
 What's left, with owners and checkboxes: **[docs/launch-checklist.md](docs/launch-checklist.md)**. When you finish an
@@ -187,7 +191,18 @@ and play an incoming Tomi call. `?presenter=0` hides them again.
 Copy `.env.example` to `.env` and fill it in. Never commit `.env`. The keys, and where to get them, are in section 1
 of [docs/launch-checklist.md](docs/launch-checklist.md). Python packages are in `requirements.txt`.
 
-Run the backend tests from `backend/` with `python -m pytest tests`. They need no keys: the model is mocked.
+Run the backend from `backend/`:
+
+```
+uvicorn app.main:app --port 8000      # one process only; then open the frontend with ?mock=0
+python -m pytest tests                # no keys needed: email, LiveKit and the model are mocked
+```
+
+An empty database gets the sample facility on first start (Dr. Ada Okafor, `ada.okafor@kestrelgeneral.ng`,
+`Blue-ward-morning-24`; patients sign in with an emailed code, PIN `1234`). Without SMTP settings, emails and their
+codes are printed in the backend log. The Vite dev server proxies `/api` to port 8000; after `npm run build` the
+backend also serves `frontend/dist`. On a host, run `uvicorn app.main:app --host 0.0.0.0 --port $PORT` from
+`backend/` with `DATABASE_URL` pointing at Postgres, and set `CARELOOP_DEMO=0` before real patients use it.
 
 ## Team preview (Vercel)
 
