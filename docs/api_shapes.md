@@ -160,6 +160,7 @@ Error rules: sign-in and reset responses must not reveal whether an account exis
 - Codes are 6 digits, valid 300 s, resend after 60 s, 5 wrong tries per code. Delivery `via` is `sms` or `voice` (Tomi reads the code out).
 - The PIN is 4 digits. It is the same PIN Tomi asks for on phone calls. 5 wrong PINs locks PIN sign-in until a code is used.
 - The app locks after `idle_lock_minutes` (10) without activity.
+- Phone numbers can be from any country. The app sends `phone` as `+<country code> <number as typed>` (for example `+234 0803 123 4567` or `+44 7400 123456`); a number typed without `+` is read as Nigerian. The backend normalises to E.164 and drops a leading trunk `0` after the country code.
 
 ```json
 PatientSession: { "id": "ps_...", "kind": "patient | caregiver", "patient_id": "p-zainab", "user_name": "Hadiza Musa",
@@ -189,10 +190,10 @@ Caregiver: { "id": "cg-1", "patient_id": "p-zainab", "name": "Hadiza Musa", "rel
 ### Care team
 
 - Password: at least 12 characters, no composition rules, block common and breached passwords and the user's email (NIST SP 800-63B). Lock for a short time after 5 failures.
-- Every sign-in needs a second step: a 6-digit code emailed to the account's address (15 minutes, 5 tries, resend after 60 s). There are no authenticator apps or backup codes. Someone who loses their email asks their hospital's CareLoop admin to change it. Staff sessions last 12 h and the page locks after 15 idle minutes.
-- Staff join two ways: an invite link from a colleague, or self sign-up with any email address (personal addresses are allowed), a hospital from `GET /facilities` and that hospital's join code. The hospital's CareLoop admin hands the code to their own staff and can change it at any time. Without the right code for the chosen hospital, no account is created (403 with `field: "join_code"`). After 5 wrong codes, sign-up is blocked for 10 minutes (429). Join codes are never sent to the browser. Sign-up then confirms the email with a 6-digit code and signs the person in. If the address already has an account, the response is the same and the email tells the owner to sign in instead.
-- Production: rate-limit join-code attempts per IP address and per hospital, log each sign-up for the hospital admin, and let the admin remove an account.
-- Each staff user sees only patients at their own hospital. The mock keeps one set of sample patients and moves them to the signed-in user's hospital.
+- Every sign-in needs a second step: a 6-digit code emailed to the account's address (15 minutes, 5 tries, resend after 60 s). There are no authenticator apps or backup codes. Someone who loses their email asks their facility's CareLoop admin to change it. Staff sessions last 12 h and the page locks after 15 idle minutes.
+- Staff join two ways: an invite link from a colleague, or self sign-up with any email address (personal addresses are allowed), a care facility from `GET /facilities` (a hospital, pharmacy, clinic or care home; the person picks the type first, then the facility) and that facility's join code. The facility's CareLoop admin hands the code to their own staff and can change it at any time. Without the right code for the chosen facility, no account is created (403 with `field: "join_code"`). After 5 wrong codes, sign-up is blocked for 10 minutes (429). Join codes are never sent to the browser. Sign-up then confirms the email with a 6-digit code and signs the person in. If the address already has an account, the response is the same and the email tells the owner to sign in instead.
+- Production: rate-limit join-code attempts per IP address and per facility, log each sign-up for the facility admin, and let the admin remove an account.
+- Each staff user sees only patients at their own care facility. The mock keeps one set of sample patients and moves them to the signed-in user's facility.
 
 ```json
 StaffSession: { "id": "ss_...", "user": { "id": "u-ada", "name": "Dr. Ada Okafor", "email": "string", "role": "string", "facility": "string", "initials": "AO" },
@@ -205,7 +206,7 @@ StaffSession: { "id": "ss_...", "user": { "id": "u-ada", "name": "Dr. Ada Okafor
 | `staffSignIn(body)` | `POST /auth/staff/sign-in` | `{ email, password }` | `{ mfa_token, masked_email, resend_in }` and emails a code; 401 generic message, 429 locked |
 | `resendStaffMfaEmail(body)` | `POST /auth/staff/mfa/email` | `{ mfa_token }` | `{ resend_in }` |
 | `verifyStaffMfa(body)` | `POST /auth/staff/mfa` | `{ mfa_token, code, remember_device }` | `{ session }`; 401 wrong code, 410 timed out, 429 too many |
-| `listFacilities()` | `GET /facilities` | | `{ facilities: [{ id, name, city }], roles: string[] }`. The mock adds `demo_join_code` to each hospital for the MVP notice on sign-up; the real backend must never return it. |
+| `listFacilities()` | `GET /facilities` | | `{ types: [{ id, label }], facilities: [{ id, type, name, city, country }], roles: string[] }`. `type` is one of `hospital`, `pharmacy`, `clinic`, `care_home`. The mock adds `demo_join_code` to each facility for the MVP notice on sign-up; the real backend must never return it. |
 | `staffSignUp(body)` | `POST /auth/staff/sign-up` | `{ name, email, password, facility_id, join_code, role, confirmed }` | `{ signup_token, masked_email, resend_in }` and emails a 6-digit code; 403 wrong join code, 429 too many |
 | `resendSignUpCode(body)` | `POST /auth/staff/sign-up/resend` | `{ signup_token }` | `{ resend_in }`; 429 too soon |
 | `verifySignUpEmail(body)` | `POST /auth/staff/sign-up/verify` | `{ signup_token, code }` | `{ session }`; 401 wrong code, 410 expired |
@@ -258,9 +259,32 @@ The mock adds `demo_code` to challenges, `demo_link` to reset responses and `dem
 
 ## Browser voice (Tomi)
 
-In the real system, `createVoiceSession` returns a short-lived LiveKit token. The browser joins the room, and the Tomi worker (`voice/tomi_agent.py`) handles audio, Spitch speech-to-text and text-to-speech, turn-taking and the PIN check. Turns reach the backend as normalized voice events (doc section 22.2).
+In the real system, `createVoiceSession` returns a short-lived LiveKit token. The browser joins the room, and the Tomi worker (`voice/tomi_agent.py`) handles audio, Spitch speech-to-text and text-to-speech, and turn-taking. The patient is already signed in, so browser voice has no PIN check (phone calls do). Turns reach the backend as normalized voice events (doc section 22.2).
 
-The mock replaces all of that with `sendVoiceInput`, a scripted dialog driven by keypad presses and demo phrases. The voice sheet shows "Voice is not available yet" for any session whose `mode` is not `mock`. Connecting `livekit-client` is the next step on the voice side (Nunsi).
+Until the backend exists, `frontend/api/voice/sessions.js` issues that token: a Vercel function on the preview, served by Vite during `npm run dev`. It needs `LIVEKIT_URL`, `LIVEKIT_API_KEY` and `LIVEKIT_API_SECRET` (root `.env` locally, Vercel project settings on the preview) and answers `503` without them. The token asks LiveKit to dispatch the agent `tomi` with job metadata `{ "patient_id", "language" }`. Body: `{ patient_id, language }`. Response: `{ session: { id, mode: "livekit", url, token, language } }`. The real backend must check the patient's session before issuing a token; this stand-in does not.
+
+With mocks on, `createVoiceSession` tries that route first and falls back to the scripted mock session if it is not set up (`?voice=mock` forces the script). The voice sheet then joins the room through `shared/live-voice.js` (`livekit-client`): microphone in, Tomi's audio out, captions from the `lk.transcription` text stream, Tomi's state from the agent's `lk.agent.state` attribute, and the emergency button when the agent sets `careloop.escalation` to `open`.
+
+The scripted mock session uses `sendVoiceInput`, a dialog driven by keypad presses and demo phrases.
+
+## Voice worker *(added; used by `voice/tomi_agent.py`, not by the browser)*
+
+The Tomi worker calls these with `Authorization: Bearer <VOICE_SERVICE_TOKEN>`, a service token that can only
+use these routes. Until they exist, the worker runs on its own mock (`VOICE_USE_MOCKS=1`, `voice/backend_client.py`).
+Outgoing calls: `POST /calls/outbound` dispatches the LiveKit agent `tomi` with job metadata
+`{ "call_id", "patient_id", "phone_e164" }`. Browser voice tokens carry the participant attribute `careloop.patient_id`.
+
+| Route | Request body | Response |
+|---|---|---|
+| `POST /voice/calls` | `{ direction, phone_e164?, patient_id? }` | `{ call: { id, language } }`; `language` is set only for outbound calls |
+| `POST /voice/calls/{id}/verify-pin` | `{ phone_e164, pin }` | `{ ok: true, patient_id }` or `{ ok: false, tries_left }`. The same answer for an unknown number and a wrong PIN; shares the app's 5-try lock |
+| `GET /voice/calls/{id}/context` | | `{ context: { patient: { id, first_name, language, timezone }, consent: { voice }, facility, plan, tasks[], opening } }`; 403 until the PIN is verified. `plan` is the approved plan only. `opening` is an approved line in the patient's language, or null |
+| `POST /voice/calls/{id}/turns/check` | `{ text, language }` | `{ action: "continue" }` or `{ action: "escalate", escalation }`. Runs the safety rules; an escalation is opened before it answers |
+| `POST /voice/calls/{id}/turns` | `{ speaker: "tomi" \| "patient", transcript, language }` | `{}`; text only, no audio |
+| `POST /voice/calls/{id}/task-updates` | `{ task_id, status: "done" \| "not_done" \| "unable", original_text }` | `{ ok }`; recorded as `patient_reported` after the patient confirmed it |
+| `POST /voice/calls/{id}/barriers` | `{ type: "cost" \| "transport" \| "distance" \| "stock" \| "no_helper" \| "other", original_text, task_id? }` | `{ ok }` |
+| `POST /voice/calls/{id}/questions` | `{ original_text }` | `{ ok }`; shows on the dashboard for the care team |
+| `POST /voice/calls/{id}/end` | `{ outcome: "completed" \| "escalated" \| "unverified" \| "not_reached", states[] }` | `{}` |
 
 ## Demo-only endpoints
 

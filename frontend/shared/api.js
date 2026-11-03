@@ -126,9 +126,25 @@ const http = {
   resetDemo: () => request('/demo/reset', { method: 'POST' })
 };
 
+// ?voice=mock keeps the scripted voice demo even where live Tomi is set up.
+const SCRIPTED_VOICE = new URLSearchParams(window.location.search).get('voice') === 'mock';
+
 const mockApi = {
   ...mock,
   ...authMock,
+  // Live Tomi in the browser wherever the voice token route is set up (frontend/api/voice/sessions.js);
+  // otherwise the scripted voice demo from the mock.
+  async createVoiceSession(body) {
+    if (!SCRIPTED_VOICE) {
+      try {
+        const live = await http.createVoiceSession(body);
+        if (live?.session?.mode === 'livekit') return live;
+      } catch {
+        // Not set up here: fall back to the scripted demo.
+      }
+    }
+    return mock.createVoiceSession(body);
+  },
   async resetDemo() {
     authMock.resetAuth();
     return mock.resetDemo();

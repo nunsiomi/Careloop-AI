@@ -94,7 +94,7 @@ export default function Onboarding({ patient, editing, onDone, onCancel }) {
           <>
             <div className="welcome-orb" aria-hidden="true"><span /></div>
             <h1 id="onboard-title" ref={headingRef} tabIndex={-1} className="onboard-title">Hello, I am Tomi</h1>
-            <p className="onboard-lede">I am here to help you follow the plan your doctors gave you when you left hospital.</p>
+            <p className="onboard-lede">I am here to help you follow the plan your care team gave you.</p>
             <ul className="promise-list">
               <li>I am an AI assistant, not a doctor or a nurse.</li>
               <li>I only repeat what your care team wrote down. I never give new medical advice.</li>

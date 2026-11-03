@@ -21,31 +21,34 @@ Add `?presenter=1` to any URL to show sign-in details on each screen and tools t
 
 - Existing account: `ada.okafor@kestrelgeneral.ng`, password `Blue-ward-morning-24`. The 6-digit sign-in code
   arrives as an email notification at the top of the screen.
-- New account: choose **Create an account** on the sign-in page. Any email address works. Pick a hospital and enter
-  that hospital's code:
+- New account: choose **Create an account** on the sign-in page. Any email address works. Choose where you work
+  (hospital, pharmacy, clinic or care home), pick the facility and enter its code:
 
-  | Hospital | Code |
-  |---|---|
-  | Kestrel General Hospital, Abuja | `KGH-4821` |
-  | Egret Teaching Hospital, Ibadan | `ETH-3067` |
-  | Hornbill Specialist Hospital, Kano | `HSH-5914` |
-  | Weaverbird Medical Centre, Enugu | `WMC-2738` |
-  | Heron Bay General Hospital, Lagos | `HBG-6409` |
+  | Type | Care facility | Code |
+  |---|---|---|
+  | Hospital | Kestrel General Hospital, Abuja, Nigeria | `KGH-4821` |
+  | Hospital | Egret Teaching Hospital, Ibadan, Nigeria | `ETH-3067` |
+  | Hospital | Hornbill Specialist Hospital, Kano, Nigeria | `HSH-5914` |
+  | Hospital | Weaverbird Medical Centre, Enugu, Nigeria | `WMC-2738` |
+  | Hospital | Heron Bay General Hospital, Lagos, Nigeria | `HBG-6409` |
+  | Pharmacy | Sunbird Pharmacy, Abuja, Nigeria | `SBP-1956` |
+  | Clinic or health centre | Ibis Family Clinic, Accra, Ghana | `IFC-4173` |
+  | Care home | Kingfisher Care Home, Nairobi, Kenya | `KCH-8352` |
 
-  You don't need to remember these: once you pick a hospital, the sign-up page shows its code with an MVP notice
-  and a **Use this code** button. Five wrong codes block sign-up for 10 minutes. The sample patients appear under the hospital you chose.
+  You don't need to remember these: once you pick a facility, the sign-up page shows its code with an MVP notice
+  and a **Use this code** button. Five wrong codes block sign-up for 10 minutes. The sample patients appear under the facility you chose.
 - Staff invite link: `/clinician/#/join/join-7f3k` (Bisi Ola, follow-up nurse).
 
 **Patients and family helpers**
 
-Hospital codes are for staff only. Patients and family helpers never use them; they join through the hospital or the patient.
+Facility codes are for staff only. Patients and family helpers never use them; they join through their care team or the patient.
 
 - Existing patient: phone `0800 000 0101` (Zainab Musa). The sign-in code arrives as a text at the top of the screen.
   On the next visit the phone remembers her, and the PIN is `1234`.
-- New patient, invited by the hospital: invite code `CL-7K4Q` (Chidi Okeke). Signs in, chooses a PIN, then agrees
+- New patient, invited by their care team: invite code `CL-7K4Q` (Chidi Okeke). Signs in, chooses a PIN, then agrees
   to how Tomi may contact him.
-- Family helper, invited by the patient: invite code `CG-3M9D` (Femi Adeyemi, son of Tola Adeyemi). Any Nigerian mobile
-  number works for the helper. A patient can invite more helpers from **Account** in the patient app.
+- Family helper, invited by the patient: invite code `CG-3M9D` (Femi Adeyemi, son of Tola Adeyemi). Any mobile number works
+  for the helper; the phone field has a country picker. A patient can invite more helpers from **Account** in the patient app.
 
 ## Five-minute walkthrough
 

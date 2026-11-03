@@ -9,10 +9,13 @@ import json
 import os
 from pathlib import Path
 from typing import Any
-from groq import Groq
+from groq import AsyncGroq
 
 # 1. Load System Prompt from Markdown
 PROMPT_PATH = Path(__file__).parent / "prompts" / "checkin_prompt.md"
+
+# Barrier types as stored on a Barrier record (docs/api_shapes.md)
+BARRIER_TYPES = ["cost", "transport", "stock", "understanding"]
 
 def load_system_prompt() -> str:
     if PROMPT_PATH.exists():
@@ -22,18 +25,18 @@ def load_system_prompt() -> str:
         "Process messages, track tasks, and log barriers safely without giving medical advice."
     )
 
-# 2. Define Tools for Grok Function Calling
+# 2. Define Tools for Groq Function Calling
 CHECKIN_TOOLS = [
     {
         "type": "function",
         "function": {
             "name": "report_barrier",
-            "description": "Use when the patient reports a barrier like cost, transport, or stock-out.",
+            "description": "Use when the patient reports a barrier: cost, transport, stock (not available) or understanding (unsure what to do).",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "task_id": {"type": "string", "description": "The ID of the task associated with the barrier"},
-                    "barrier_type": {"type": "string", "enum": ["cost", "transport", "stock_out", "confusion"]}
+                    "barrier_type": {"type": "string", "enum": BARRIER_TYPES}
                 },
                 "required": ["task_id", "barrier_type"]
             }
@@ -55,6 +58,9 @@ CHECKIN_TOOLS = [
     }
 ]
 
+def _task_ids(care_plan: dict[str, Any]) -> set[str]:
+    return {task.get("id") for task in care_plan.get("tasks", []) if isinstance(task, dict)}
+
 async def run(payload: dict[str, Any]) -> dict[str, Any]:
     """
     Check-in Agent entry point called by Olamide's orchestrator.
@@ -62,11 +68,12 @@ async def run(payload: dict[str, Any]) -> dict[str, Any]:
     Returns structured action intent, tool proposals, and reply draft.
     """
     # Initialize Groq client using environment variables
+    # (move to the shared Groq client once it exists; launch checklist, section 3)
     api_key = os.getenv("GROQ_API_KEY")
     if not api_key:
         raise ValueError("GROQ_API_KEY environment variable is missing or empty.")
-    
-    client = Groq(api_key=api_key)
+
+    client = AsyncGroq(api_key=api_key, timeout=20)
     model = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
 
     patient_message = payload.get("message", "")
@@ -79,12 +86,12 @@ async def run(payload: dict[str, Any]) -> dict[str, Any]:
     messages = [{"role": "system", "content": system_prompt}]
     messages.extend(history)
     messages.append({
-        "role": "user", 
+        "role": "user",
         "content": f"[Care Plan Context]: {json.dumps(care_plan)}\n\n[Patient Message]: {patient_message}"
     })
 
-    # Call Grok model with tools enabled
-    response = client.chat.completions.create(
+    # Call the Groq model with tools enabled
+    response = await client.chat.completions.create(
         model=model,
         messages=messages,
         tools=CHECKIN_TOOLS,
@@ -93,23 +100,37 @@ async def run(payload: dict[str, Any]) -> dict[str, Any]:
 
     response_message = response.choices[0].message
     reply_draft = response_message.content or "Thank you for your update. Keep following your care plan."
-    
+
     intent = "general_checkin"
     task_id = None
     barrier_type = None
     requires_confirmation = False
+    confidence_state = "confident"
 
-    # Parse any tool calls requested by Grok
-    if hasattr(response_message, "tool_calls") and response_message.tool_calls:
+    # Parse any tool call the model proposed, and only keep it if it matches the care plan
+    if getattr(response_message, "tool_calls", None):
         tool_call = response_message.tool_calls[0]
         func_name = tool_call.function.name
-        func_args = json.loads(tool_call.function.arguments)
+        try:
+            func_args = json.loads(tool_call.function.arguments or "{}")
+        except json.JSONDecodeError:
+            func_args = {}
 
-        intent = func_name
-        task_id = func_args.get("task_id")
-        if func_name == "report_barrier":
-            barrier_type = func_args.get("barrier_type")
+        valid = (
+            func_name in ("report_barrier", "mark_task_done")
+            and func_args.get("task_id") in _task_ids(care_plan)
+            and (func_name != "report_barrier" or func_args.get("barrier_type") in BARRIER_TYPES)
+        )
+        if valid:
+            intent = func_name
+            task_id = func_args["task_id"]
+            barrier_type = func_args.get("barrier_type") if func_name == "report_barrier" else None
+            # Both change the patient's record, so the patient confirms first
             requires_confirmation = True
+        else:
+            confidence_state = "needs_confirmation"
+            if not response_message.content:
+                reply_draft = "Sorry, I did not quite follow. Which part of your care plan do you mean?"
 
     # Return the clean structured contract dictionary expected by Olamide
     return {
@@ -117,8 +138,6 @@ async def run(payload: dict[str, Any]) -> dict[str, Any]:
         "task_id": task_id,
         "barrier_type": barrier_type,
         "requires_confirmation": requires_confirmation,
-        "confidence_state": "confident",
+        "confidence_state": confidence_state,
         "reply_draft": reply_draft
     }
-
-
