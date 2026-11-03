@@ -14,10 +14,10 @@ Last updated: 3 Nov 2026
 |---|---|
 | 1. Accounts and keys | 0 / 11 |
 | 2. Backend core | 11 / 13 |
-| 3. Agents | 7 / 9 |
-| 4. Safety | 3 / 5 |
+| 3. Agents | 9 / 9 |
+| 4. Safety | 4 / 5 |
 | 5. Tomi voice | 1 / 6 |
-| 6. Frontend | 5 / 13 |
+| 6. Frontend | 9 / 13 |
 | 7. Deploy | 1 / 7 |
 | 8. Clinical and team sign-off | 1 / 6 |
 
@@ -108,9 +108,13 @@ All agents call Groq through one shared client, so the model can be changed in o
   approved contacts only; escalates after 2 options that did not work)
 - [x] Escalation Agent: red flags → open escalation on the dashboard. — Dorcas (done by Nunsi, 3 Nov 2026: `agents/escalation.py` and
   `services/escalations.py`; fact-only brief, care-team email without patient details, backup after 15 minutes)
-- [ ] Language Agent: Hausa, Yoruba, Igbo and plain English, reading level checks. — Nunsi
-- [ ] Clinician Assistant: `POST /assistant/drafts` and `POST /assistant/apply`, same rules as the mock
+- [x] Language Agent: Hausa, Yoruba, Igbo and plain English, reading level checks. — Nunsi (done by Nunsi, 3 Nov 2026: `agents/language.py`;
+  a translation is kept only if every number and medicine name survives, otherwise the app shows English. The
+  emergency line uses Tomi's prepared translation, never the model. Run with Groq in all three languages)
+- [x] Clinician Assistant: `POST /assistant/drafts` and `POST /assistant/apply`, same rules as the mock
   (only what the clinician said, missing details flagged, no texts or calls without consent). — Nunsi
+  Done 3 Nov 2026: Groq drafts (`agents/assistant.py`), and every value is checked against the clinician's own
+  words (`services/assistant.py`); rules-based drafting when the model is not available.
 
 ## 4. Safety
 
@@ -120,7 +124,9 @@ All agents call Groq through one shared client, so the model can be changed in o
 - [x] Safety rules run before any agent reply reaches a patient; red flags skip the model entirely. — Dorcas
   (done by Nunsi, 3 Nov 2026: `safety/rules.py` on every chat message and voice turn; tests per language in `tests/test_safety.py`)
 - [x] Numbers in outgoing text (doses, times) checked against the approved plan. — Dorcas (done by Nunsi, 3 Nov 2026: `safety/number_check.py`)
-- [ ] Low-confidence speech is read back to the patient or sent to a person. — Nunsi
+- [x] Low-confidence speech is read back to the patient or sent to a person. — Nunsi (done by Nunsi, 3 Nov 2026: Spitch gives no
+  confidence, so the worker judges the transcript; unclear speech is asked again, twice unclear goes to the care
+  team, and a danger word in unclear speech escalates. Task updates were already read back before saving)
 - [x] SMS and email templates never name a medicine, condition or test. — Olamide (done by Nunsi, 3 Nov 2026: checked in
   `tests/test_notifications.py` for every template)
 
@@ -148,12 +154,18 @@ All agents call Groq through one shared client, so the model can be changed in o
   sample facilities in Ghana and Kenya, phone numbers from any country. — Nunsi, 2 Nov 2026
 - [x] Email first: SMS switched off in the app (`SMS_AVAILABLE` in `shared/languages.js`), sign-in codes and
   invites by email, onboarding asks for an email address, dashboard "Send a message" uses email. — Nunsi, 3 Nov 2026
-- [ ] Bedside welcome text on onboarding. Decide first: language of the text, and what happens if the patient
+- [x] Bedside welcome text on onboarding. Decide first: language of the text, and what happens if the patient
   hasn't signed in after 24 hours. With SMS off, this becomes a welcome email or a printed invite code. — Nunsi
-- [ ] Assign patients to clinicians. — Nunsi
-- [ ] Hospital admin page: change the join code, remove staff, see new sign-ups (needs Nunsi's OK for a new page). — Nunsi
-- [ ] Privacy notice and terms pages (NDPA 2023). — Nunsi
+  (done by Nunsi, 3 Nov 2026: the invite email goes in the patient's language with the English underneath; after 24 hours one
+  reminder email, or a timeline note asking the care team to call if there is no email address)
+- [x] Assign patients to clinicians. — Nunsi (done by Nunsi, 3 Nov 2026: lead clinician on the profile, "My patients" filter)
+- [x] Hospital admin page: change the join code, remove staff, see new sign-ups (needs Nunsi's OK for a new page). — Nunsi
+  (done by Nunsi, 3 Nov 2026: Facility admin page, for admins only)
+- [x] Privacy notice and terms pages (NDPA 2023). — Nunsi (done by Nunsi, 3 Nov 2026: `#/privacy` and `#/terms`; have the facility's data
+  protection officer or a lawyer check the wording before launch)
 - [ ] Every screen tested with `?mock=0` against the real backend. — Nunsi
+  Done so far: every field the app reads compared between the mock and the backend (they match), and the API
+  tested end to end. Still to do: click through each screen in a browser with the backend running.
 - [ ] `/api/*` rewrite in `frontend/vercel.json` pointing at the backend. — Nunsi
 - [ ] Real backend made the default on the live site (mocks off). — Nunsi
 - [ ] Beta chips removed for each language that passes native-speaker checks. — Nunsi

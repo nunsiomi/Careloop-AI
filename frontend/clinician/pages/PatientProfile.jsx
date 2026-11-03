@@ -4,7 +4,7 @@ import { ArrowLeft, ClipboardCheck, MessageSquareText, Mic, PhoneOutgoing } from
 import { CareLoopAPI } from '../../shared/api.js';
 import { READING_LEVELS } from '../../shared/languages.js';
 import { duration, formatDateTime, formatTime, dayLabel, whenLabel } from '../../shared/format.js';
-import { ErrorNote, LanguageTag, LoadingBlock, StatusBadge, useAsync, useInterval } from '../../shared/ui.jsx';
+import { ErrorNote, LanguageTag, LoadingBlock, StatusBadge, useAsync, useInterval, useToast } from '../../shared/ui.jsx';
 import { CallPatientDialog, ChannelLabel, ConsentedChannels, SendMessageDialog, Timeline, Transcript, directionIcon } from '../components.jsx';
 import { PageHeader, useDashboard } from '../shell.jsx';
 
@@ -85,6 +85,7 @@ export default function PatientProfile() {
         <div><dt>Phone</dt><dd>{patient.phone_e164}{patient.pin_set ? ' (PIN set)' : ''}</dd></div>
         <div><dt>Family helper</dt><dd>{patient.caregiver ? `${patient.caregiver.name}, ${patient.caregiver.relation.toLowerCase()}. ${patient.caregiver.scope}.` : 'None'}</dd></div>
         <div><dt>Plan</dt><dd><StatusBadge kind="plan" status={patient.plan_status} /></dd></div>
+        <div><dt>Lead clinician</dt><dd><LeadPicker patient={patient} onChange={query.reload} /></dd></div>
       </dl>
 
       <div className="tabs" role="tablist" aria-label="Patient record">
@@ -197,5 +198,50 @@ function CallsTab({ calls, notifications }) {
         ))}
       </ul>
     </div>
+  );
+}
+
+/* Who leads this patient's follow-up. Anyone on the care team can change it; the change is logged on the timeline. */
+function LeadPicker({ patient, onChange }) {
+  const [editing, setEditing] = useState(false);
+  const [staff, setStaff] = useState(null);
+  const [choice, setChoice] = useState(patient.assigned_to?.id || '');
+  const [busy, setBusy] = useState(false);
+  const toast = useToast();
+
+  const open = async () => {
+    setEditing(true);
+    setChoice(patient.assigned_to?.id || '');
+    try { setStaff((await CareLoopAPI.listStaff()).staff); } catch (error) { toast(error.message); setEditing(false); }
+  };
+  const save = async () => {
+    setBusy(true);
+    try {
+      await CareLoopAPI.assignPatient(patient.id, { staff_id: choice || null });
+      toast(choice ? 'Lead clinician changed.' : 'Lead clinician removed.');
+      setEditing(false);
+      onChange();
+    } catch (error) { toast(error.message); }
+    setBusy(false);
+  };
+
+  if (!editing) {
+    return (
+      <span className="inline-meta">
+        {patient.assigned_to ? patient.assigned_to.name : <span className="muted">Not assigned</span>}
+        <button type="button" className="link-button" onClick={open}>Change<span className="sr-only"> lead clinician</span></button>
+      </span>
+    );
+  }
+  return (
+    <span className="lead-picker">
+      <label htmlFor="lead-select" className="sr-only">Lead clinician</label>
+      <select id="lead-select" className="select" value={choice} onChange={(event) => setChoice(event.target.value)} disabled={!staff || busy}>
+        <option value="">Not assigned</option>
+        {(staff || []).map((member) => <option key={member.id} value={member.id}>{member.name} ({member.role})</option>)}
+      </select>
+      <button type="button" className="btn btn-primary" onClick={save} disabled={!staff || busy}>Save</button>
+      <button type="button" className="btn btn-quiet" onClick={() => setEditing(false)} disabled={busy}>Cancel</button>
+    </span>
   );
 }

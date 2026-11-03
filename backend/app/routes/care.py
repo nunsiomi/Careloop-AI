@@ -5,6 +5,7 @@ from fastapi import APIRouter, Body, Request
 from app.db import store
 from app.routes.deps import patient_for, record_for, require_any, require_patient, require_staff, scoped
 from app.security import hash_secret
+from app.agents import language
 from app.services import care, chat, escalations, outbox, plans
 from app.services.activity_log import log_event
 from app.util import EMAIL_PATTERN, ApiError, make_id, normalize_phone, now_iso
@@ -50,9 +51,31 @@ def create_patient(request: Request, body: dict = Body(default={})):
         "id": make_id("p"), "name": name, "age": body.get("age"), "language": body.get("language") if body.get("language") in LANGUAGES else "English",
         "literacy_level": body.get("literacy_level") or "standard", "caregiver_mode": bool(body.get("caregiver_mode")), "caregiver": None,
         "phone_e164": phone, "email": email, "channels": [], "contact_window": None, "pin_set": False, "pin_hash": None, "consent_at": None,
-        "activation_status": "plan_review", "facility": actor.facility, "facility_id": facility.get("id"), "timezone": "Africa/Lagos", "added_by": actor.name})
+        "activation_status": "plan_review", "facility": actor.facility, "facility_id": facility.get("id"), "timezone": "Africa/Lagos", "added_by": actor.name,
+        "assigned_to": {"id": actor.session["user_id"], "name": actor.name}})
     log_event(patient["id"], actor_type="clinician", actor_id=actor.name, source_channel="dashboard", event_type="patient_created",
               summary="Patient record created with discharge note.", verification_status="clinician_verified")
+    return {"patient": care.patient_summary(patient)}
+
+
+@router.get("/staff")
+def list_staff(request: Request):
+    """The care team at the signed-in person's facility, for assigning patients."""
+    actor = require_staff(request)
+    return {"staff": [{"id": user["id"], "name": user["name"], "role": user["role"]} for user in store().where("staff", facility=actor.facility)]}
+
+
+@router.patch("/patients/{patient_id}/assignment")
+def assign_patient(patient_id: str, request: Request, body: dict = Body(default={})):
+    actor = require_staff(request)
+    patient = patient_for(actor, patient_id)
+    staff_id = body.get("staff_id")
+    lead = store().first("staff", id=staff_id, facility=actor.facility) if staff_id else None
+    if staff_id and not lead:
+        raise ApiError("Choose someone from your care team.")
+    patient["assigned_to"] = {"id": lead["id"], "name": lead["name"]} if lead else None
+    log_event(patient_id, actor_type="clinician", actor_id=actor.name, source_channel="dashboard", event_type="patient_assigned",
+              summary=f"Lead clinician set to {lead['name']}." if lead else "Lead clinician removed.", verification_status="clinician_verified")
     return {"patient": care.patient_summary(patient)}
 
 
@@ -159,6 +182,15 @@ def get_messages(patient_id: str, request: Request):
     return {"messages": scoped("messages", require_any(request), patient_id)}
 
 
+async def translate(patient: dict, english: str) -> dict:
+    """The reply in the patient's language and reading level (Language Agent), or English if any check fails."""
+    names = [task["title"] for task in store().where("tasks", patient_id=patient["id"])]
+    plan = store().first("plans", patient_id=patient["id"], status="approved") or {}
+    names += [item.get("name", "") for item in plan.get("medications", [])] + [item.get("where", "") for item in plan.get("appointments", [])]
+    return await language.run({"text": english, "language": patient["language"], "reading_level": patient.get("literacy_level"),
+                               "protected_terms": sorted({name for name in names if name})})
+
+
 @router.post("/patients/{patient_id}/messages")
 async def send_message(patient_id: str, request: Request, body: dict = Body(default={})):
     actor = require_patient(request)
@@ -174,9 +206,10 @@ async def send_message(patient_id: str, request: Request, body: dict = Body(defa
             prompt["answered"] = True
     result = await chat.handle(patient, {**body, "original_text": text}, actor.name if actor.kind == "caregiver" else None)
     escalation = {"id": result["escalation"]["id"], "call_number": care.SUPPORT["emergency_number"]} if result["escalation"] else None
-    reply = store().add("messages", {"id": make_id("m"), "patient_id": patient_id, "direction": "careloop", "channel": "web", "original_text": result["reply"],
-                                     "english_text": result["reply"], "language": patient["language"], "confidence": 0.98, "number_check_passed": True,
-                                     "created_at": now_iso(), **({"barrier": result["barrier"]} if result["barrier"] else {}), **({"escalation": escalation} if escalation else {})})
+    shown = care.emergency_in(patient["language"]) if escalation else await translate(patient, result["reply"])
+    reply = store().add("messages", {"id": make_id("m"), "patient_id": patient_id, "direction": "careloop", "channel": "web", "original_text": shown["text"],
+                                     "english_text": result["reply"], "language": shown["language"], "confidence": 0.98,
+                                     "number_check_passed": shown["number_check_passed"], "uncertainty_flags": shown["uncertainty_flags"], "created_at": now_iso(), **({"barrier": result["barrier"]} if result["barrier"] else {}), **({"escalation": escalation} if escalation else {})})
     if escalation:
         await escalations.send_alerts()  # tell the care team now, not at the next scheduler run
     return {"reply": reply, "barrier": result["barrier"], "escalation": escalation, "reschedule": result["reschedule"]}

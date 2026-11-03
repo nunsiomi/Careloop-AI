@@ -5,10 +5,15 @@ the patient has not agreed to. This is the rules-based stand-in ported from the 
 drafting step can replace `draft_action` later without changing the contract (docs/api_shapes.md).
 """
 
+import os
 import re
 from datetime import datetime, timedelta
 
+from groq import GroqError
+
+from app.agents import assistant as assistant_agent
 from app.db import store
+from app.safety import number_check
 from app.services import care, notifications, outbox, voice
 from app.services.activity_log import log_event
 from app.util import ApiError, first_name, iso, make_id, now
@@ -303,3 +308,114 @@ def apply(patient: dict, actions: list[dict], by: str) -> dict:
         except (ApiError, ValueError) as error:
             results.append({"id": action.get("id"), "kind": action.get("kind"), "ok": False, "summary": getattr(error, "detail", str(error))})
     return {"results": results, "patient": {"id": patient["id"], "name": patient["name"]}}
+
+
+# ======================================================================= drafting with the model (Groq)
+
+def _in_words(value: str, instruction: str) -> bool:
+    return bool(value) and value.strip().lower() in instruction.lower()
+
+
+def _local_date(iso_text: str) -> str | None:
+    try:
+        return care.local(iso_text).date().isoformat()
+    except (TypeError, ValueError):
+        return None
+
+
+def _checked(action: dict, instruction: str, patient: dict) -> dict:
+    """Keep a model-proposed value only if it comes from the clinician's own words; otherwise clear it and say so."""
+    lower = instruction.lower()
+    issues = [str(item) for item in action.get("issues") or [] if str(item).strip()][:4]
+    kind = action["kind"]
+    checked = {"id": make_id("act"), "kind": kind}
+    rules_version = draft_action(instruction, patient)  # what the rules read from the same words
+    fallback_hour = 9 if kind == "test" else 10
+    dates = {when for clause in split_instruction(instruction) if (when := parse_when(clause, fallback_hour))}
+
+    def when_field(key: str) -> str | None:
+        proposed = action.get(key) or None
+        if not proposed:
+            return None
+        if _local_date(proposed) not in {_local_date(item) for item in dates}:
+            issues.append("Check the date: it was not in what you said.")
+            return None
+        if not number_check.check(care.local(proposed).strftime("%H:%M"), [instruction]).passed:
+            match = next((item for item in dates if _local_date(item) == _local_date(proposed)), proposed)
+            issues.append(f"No time given. Set to {care.local(match).strftime('%H:%M')}. Change it if needed.")
+            return match
+        return proposed
+
+    if kind == "medicine":
+        issues = []  # the checks below say exactly what is missing; the model's own wording would repeat it
+        title, detail = str(action.get("title") or "").strip(), str(action.get("detail") or "").strip()
+        name_word = re.match(r"[A-Za-z][A-Za-z-]+", title)
+        if not title or not name_word or name_word.group(0).lower() not in lower or not number_check.check(f"{title} {detail}", [instruction]).passed:
+            if title:
+                issues.append("The medicine name or dose is not exactly what you said. Type it in before you confirm.")
+            title, detail = rules_version.get("title", "") if rules_version.get("kind") == "medicine" else "", ""
+        times = [time for time in action.get("times") or [] if re.match(r"^([01]\d|2[0-3]):[0-5]\d$", str(time))]
+        said_times = parse_times(lower)
+        if not times or (said_times != times and not number_check.check(" ".join(times), [instruction]).passed):
+            times = said_times or ["08:00"]
+            if not said_times:
+                issues.append("No time given. Set to 08:00. Change it if needed.")
+        days = action.get("days")
+        if not isinstance(days, int) or str(days) not in number_check.numbers(instruction) | {str(NUMBER_WORDS.get(word, "")) for word in lower.split()}:
+            days = 7
+            issues.append("No length given. Set to 7 days. Change it if needed.")
+        starts_on = action.get("starts_on") if re.match(r"^\d{4}-\d{2}-\d{2}$", str(action.get("starts_on") or "")) else _local_now().date().isoformat()
+        if not detail:
+            issues.insert(0, "No dose given. Add how much to take before you confirm.")
+        checked.update(title=title, detail=detail, times=times, days=days, starts_on=starts_on)
+    elif kind == "test":
+        title, place = str(action.get("title") or "").strip(), str(action.get("detail") or "").strip()
+        checked.update(title=title if title and title.split()[0].lower() in lower else "Test", detail=place if _in_words(place, instruction) else "",
+                       due_at=when_field("due_at"))
+        if not checked["due_at"]:
+            issues.append("No date given. Set when it is due.")
+    elif kind == "visit":
+        where = str(action.get("where") or "").strip()
+        checked.update(what=str(action.get("what") or "Review visit").strip() or "Review visit", where=where if _in_words(where, instruction) else "",
+                       starts_at=when_field("starts_at"))
+        if not checked["where"]:
+            issues.append("No place given. Add where the visit is.")
+        if not checked["starts_at"]:
+            issues.append("No date or time given. Set when the visit is.")
+    elif kind == "send_text":
+        template = action.get("template") if action.get("template") in ASSISTANT_TEMPLATES else "call_clinic"
+        checked["template"] = template
+        if not notifications.message_channels(patient):
+            checked["blocked"] = True
+            issues = [f"{first_name(patient['name'])} has not agreed to email reminders, so this cannot be sent."]
+    elif kind == "call_patient":
+        if "voice" not in patient.get("channels", []):
+            checked["blocked"] = True
+            issues = [f"{first_name(patient['name'])} has not agreed to phone calls, so Tomi cannot call."]
+        else:
+            if parse_when(instruction, 10):
+                issues.append("Tomi calls straight away. Calls at a set time are not available yet.")
+    else:
+        checked["text"] = _cap(str(action.get("text") or instruction).strip())
+    checked["issues"] = list(dict.fromkeys(issues))
+    return checked
+
+
+async def draft_with_model(text: str, patient_id: str | None, facility: str) -> dict:
+    """The model's proposal, checked field by field; the rules-based draft when the model is not available."""
+    base = draft(text, patient_id, facility)
+    if base["needs_patient"] or not os.getenv("GROQ_API_KEY"):
+        return base
+    patient = store().get("patients", base["patient"]["id"])
+    try:
+        proposed = await assistant_agent.run({"instruction": base["instruction"], "patient_name": patient["name"], "today": _local_now(),
+                                              "timezone": str(care.zone()), "templates": [item["id"] for item in base["templates"]]})
+    except (ValueError, GroqError):
+        return base
+    whole = base["instruction"].strip().rstrip(".").lower()
+    proposed = [action for action in proposed if not (action["kind"] == "note" and len(proposed) > 1
+                                                      and str(action.get("text") or "").strip().rstrip(".").lower() == whole)]
+    actions = [_checked(action, base["instruction"], patient) for action in proposed]
+    if not actions:
+        return base
+    return {**base, "actions": actions, "reply": draft_reply(patient, actions)}

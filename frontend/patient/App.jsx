@@ -13,6 +13,7 @@ import AccountScreen from './Account.jsx';
 import { InviteScreen, PhoneSignIn, SetPinScreen, UnlockScreen, VerifyScreen, WelcomeScreen } from './Auth.jsx';
 import { LogoMark, SafetyFooter } from './parts.jsx';
 import { forgetDevice, rememberDevice, rememberedDevice } from './device.js';
+import LegalScreen from './Legal.jsx';
 
 const TABS = [
   { id: 'today', label: 'Today', icon: House },
@@ -21,6 +22,8 @@ const TABS = [
   { id: 'visits', label: 'Visits', icon: CalendarDays }
 ];
 const SIGNED_OUT_ROUTES = ['welcome', 'sign-in', 'verify', 'unlock', 'invite', 'forgot-pin'];
+// Open to everyone, signed in or not.
+const PUBLIC_ROUTES = ['privacy', 'terms'];
 
 /* Hash routes: #/today, #/invite/CL-7K4Q. Kept tiny on purpose; the patient app has few screens. */
 function useHashRoute() {
@@ -74,7 +77,7 @@ export default function PatientApp() {
 
   // Route guard.
   useEffect(() => {
-    if (session === undefined) return;
+    if (session === undefined || PUBLIC_ROUTES.includes(route.name)) return;
     if (!session && !SIGNED_OUT_ROUTES.includes(route.name)) go(rememberedDevice() ? 'unlock' : 'welcome', { replace: true });
     if (!session && route.name === 'verify' && !challenge) go('sign-in', { replace: true });
     if (!session && route.name === 'unlock' && !rememberedDevice()) go('welcome', { replace: true });
@@ -83,6 +86,7 @@ export default function PatientApp() {
   }, [session, route.name, go, challenge]);
 
   if (session === undefined) return <main className="auth-page"><LoadingBlock lines={3} /></main>;
+  if (PUBLIC_ROUTES.includes(route.name)) return <LegalScreen doc={route.name} go={go} signedIn={Boolean(session)} />;
 
   if (!session) {
     const shared = { go, notice };

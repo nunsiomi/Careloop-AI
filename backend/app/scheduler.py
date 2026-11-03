@@ -13,12 +13,13 @@ from datetime import timedelta
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from app.db import store
-from app.services import escalations, outbox
+from app.services import escalations, identity, outbox
 from app.services.activity_log import log_event
 from app.util import iso, now, now_iso
 
 log = logging.getLogger("careloop.scheduler")
 OVERDUE_AFTER = timedelta(hours=2)
+INVITE_FOLLOW_UP = timedelta(hours=24)
 _lock = asyncio.Lock()
 _scheduler: AsyncIOScheduler | None = None
 
@@ -32,6 +33,23 @@ def mark_overdue() -> int:
         log_event(task["patient_id"], actor_type="system", actor_id="Scheduler", source_channel="system", event_type="task_overdue",
                   summary=f"{task['title']}: no report 2 hours after it was due. Not treated as a missed dose.", verification_status="system_recorded")
     return len(late)
+
+
+async def invite_followups() -> None:
+    """Patients who have not joined 24 hours after their invite: one reminder email, or, with no email address,
+    a note on the timeline so the care team can call them."""
+    cutoff = iso(now() - INVITE_FOLLOW_UP)
+    pending = store().where("invites", lambda item: item.get("created_at", "9") < cutoff and not item.get("followed_up_at"), kind="patient", status="pending")
+    for invite in pending:
+        invite["followed_up_at"] = now_iso()
+        patient = store().get("patients", invite["patient_id"])
+        if not patient or patient.get("consent_at"):
+            continue
+        emailed = await identity.send_welcome(patient, invite, reminder=True)
+        log_event(patient["id"], actor_type="system", actor_id="Scheduler", source_channel="email" if emailed else "system", event_type="invite_follow_up",
+                  summary="Not joined 24 hours after the invite. Reminder email sent." if emailed else
+                          "Not joined 24 hours after the invite, and there is no email address. Please contact the patient.",
+                  verification_status="system_recorded")
 
 
 def clear_expired() -> None:
@@ -50,6 +68,7 @@ async def tick() -> None:
             await outbox.send_due()
             mark_overdue()
             await escalations.send_alerts()
+            await invite_followups()
             if os.getenv("GROQ_API_KEY"):
                 await escalations.improve_briefs()
             clear_expired()

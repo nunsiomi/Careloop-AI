@@ -26,6 +26,7 @@ Routes follow section 11 of the project documentation v2. Routes marked *(added)
   "phone_e164": "+2348000000101", "email": "string or null",
   "channels": ["web", "voice", "sms", "email"], "contact_window": "08:00-11:00", "pin_set": true,
   "consent_at": "ISO or null", "activation_status": "plan_review | invited | active",
+  "assigned_to": { "id": "u-ada", "name": "Dr. Ada Okafor" } or null,  (added: the lead clinician)
 
   "plan_status": "needs_review | approved | not_created",
   "open_tasks": 2, "overdue_critical": 0, "open_barriers": 1, "open_escalations": 1,
@@ -207,7 +208,7 @@ Caregiver: { "id": "cg-1", "patient_id": "p-zainab", "name": "Hadiza Musa", "rel
 - Each staff user sees only patients at their own care facility. The mock keeps one set of sample patients and moves them to the signed-in user's facility.
 
 ```json
-StaffSession: { "id": "ss_...", "user": { "id": "u-ada", "name": "Dr. Ada Okafor", "email": "string", "role": "string", "facility": "string", "initials": "AO" },
+StaffSession: { "id": "ss_...", "user": { "id": "u-ada", "name": "Dr. Ada Okafor", "email": "string", "role": "string", "facility": "string", "initials": "AO", "is_admin": true },
   "remember_device": false, "idle_lock_minutes": 15, "expires_at": "ISO" }
 ```
 
@@ -238,6 +239,11 @@ The mock adds `demo_code` to challenges, `demo_link` to reset responses and `dem
 | `CareLoopAPI` method | HTTP | Request body | Response |
 |---|---|---|---|
 | `getSupportInfo()` | `GET /support` *(added)* | | `{ tomi_number, emergency_number, emergency_text }` |
+| `listStaff()` | `GET /staff` *(added)* | | `{ staff: [{ id, name, role }] }`, the care team at your facility |
+| `assignPatient(id, body)` | `PATCH /patients/{id}/assignment` *(added)* | `{ staff_id or null }` | `{ patient }`; logged on the timeline |
+| `getAdminFacility()` | `GET /admin/facility` *(added; admin only)* | | `{ facility: { id, type, name, city, country, join_code }, staff: [{ id, name, email, role, is_admin, joined_at, last_seen_at }] }` (newest first); 403 for non-admins |
+| `newJoinCode()` | `POST /admin/join-code` *(added; admin only)* | | `{ join_code }`; the old code stops working |
+| `removeStaff(id)` | `DELETE /admin/staff/{id}` *(added; admin only)* | | `{ ok }`; signs them out everywhere and unassigns their patients; 409 for yourself |
 | `listPatients()` | `GET /patients` | | `{ patients: Patient[] }` |
 | `getPatient(id)` | `GET /patients/{id}` | | `{ patient }` |
 | `createPatient(body)` | `POST /patients` | `{ name, phone_e164, email, language, literacy_level, caregiver_mode }` | `{ patient }` |
@@ -248,7 +254,7 @@ The mock adds `demo_code` to challenges, `demo_link` to reset responses and `dem
 | `updatePlan(planId, body)` | `PATCH /plans/{planId}` *(added)* | edited Plan fields | `{ plan }` |
 | `approvePlan(planId, body)` | `POST /plans/{planId}/approve` | `{ override_issues }` | `{ plan }` |
 | `getMessages(id)` | `GET /patients/{id}/messages` | | `{ messages[] }` |
-| `sendMessage(id, body)` | `POST /patients/{id}/messages` | `{ original_text, language, task_id?, quick_reply? }` | `{ reply, barrier, escalation, reschedule }` |
+| `sendMessage(id, body)` | `POST /patients/{id}/messages` | `{ original_text, language, task_id?, quick_reply? }` | `{ reply, barrier, escalation, reschedule }`. `reply.original_text` is in the patient's language when the Language Agent's checks pass, with `english_text`, `language`, `number_check_passed` and `uncertainty_flags`; otherwise English with `number_check_passed: false` |
 | `listEvents({ patient_id, limit })` | `GET /patients/{id}/events`, or `GET /events` *(added)* for the feed across all patients | | `{ events: CareEvent[] }`, newest first |
 | `listAppointments(filters)` | `GET /appointments?patient_id=` | | `{ appointments[] }` |
 | `listSlots()` | `GET /clinic-slots` *(added)* | | `{ slots[] }` (future slots) |
@@ -291,7 +297,7 @@ Outgoing calls: `POST /calls/outbound` dispatches the LiveKit agent `tomi` with 
 | `POST /voice/calls` | `{ direction, phone_e164?, patient_id? }` | `{ call: { id, language } }`; `language` is set only for outbound calls |
 | `POST /voice/calls/{id}/verify-pin` | `{ phone_e164, pin }` | `{ ok: true, patient_id }` or `{ ok: false, tries_left }`. The same answer for an unknown number and a wrong PIN; shares the app's 5-try lock |
 | `GET /voice/calls/{id}/context` | | `{ context: { patient: { id, first_name, language, timezone }, consent: { voice }, facility, plan, tasks[], opening } }`; 403 until the PIN is verified. `plan` is the approved plan only. `opening` is an approved line in the patient's language, or null |
-| `POST /voice/calls/{id}/turns/check` | `{ text, language }` | `{ action: "continue" }` or `{ action: "escalate", escalation }`. Runs the safety rules; an escalation is opened before it answers |
+| `POST /voice/calls/{id}/turns/check` | `{ text, language, confidence? }` | `{ action: "continue" }`, `{ action: "clarify" }` (unclear speech: ask again) or `{ action: "escalate", escalation }`. Runs the safety rules; an escalation is opened before it answers. The worker sends `confidence: 0.4` for a transcript it judges unclear (Spitch gives no score) |
 | `POST /voice/calls/{id}/turns` | `{ speaker: "tomi" \| "patient", transcript, language }` | `{}`; text only, no audio |
 | `POST /voice/calls/{id}/task-updates` | `{ task_id, status: "done" \| "not_done" \| "unable", original_text }` | `{ ok }`; recorded as `patient_reported` after the patient confirmed it |
 | `POST /voice/calls/{id}/barriers` | `{ type: "cost" \| "transport" \| "distance" \| "stock" \| "no_helper" \| "other", original_text, task_id? }` | `{ ok }` |

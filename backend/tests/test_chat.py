@@ -131,3 +131,33 @@ def test_worker_turn_with_a_negated_flag_continues(client):
     client.post(f"/api/voice/calls/{call['id']}/verify-pin", json={"phone_e164": "+2348000000101", "pin": "1234"}, headers=headers)
     result = client.post(f"/api/voice/calls/{call['id']}/turns/check", json={"text": "I have no chest pain", "language": "en"}, headers=headers).json()
     assert result == {"action": "continue"}
+
+
+def test_worker_unclear_turn_is_clarified_unless_it_holds_a_danger_word(client):
+    headers = {"Authorization": "Bearer test-worker-token"}
+    call = client.post("/api/voice/calls", json={"direction": "inbound", "phone_e164": "+2348000000101"}, headers=headers).json()["call"]
+    client.post(f"/api/voice/calls/{call['id']}/verify-pin", json={"phone_e164": "+2348000000101", "pin": "1234"}, headers=headers)
+    check = lambda text: client.post(f"/api/voice/calls/{call['id']}/turns/check", json={"text": text, "language": "ha", "confidence": 0.4}, headers=headers).json()
+    assert check("mm ba") == {"action": "clarify"}
+    assert check("mm kirji ba")["action"] == "escalate"
+
+
+def test_patient_not_joined_after_24_hours_gets_one_reminder(client, mailbox):
+    from app.scheduler import invite_followups
+    store().get("patients", "p-chidi")["email"] = "chidi.okeke@example.com"
+    invite = store().get("invites", "CL-7K4Q")
+    invite["created_at"] = iso(now() - timedelta(hours=25))
+    asyncio.run(invite_followups())
+    asyncio.run(invite_followups())
+    reminders = [mail for mail in mailbox.sent if mail["subject"] == "Reminder: your CareLoop invite"]
+    assert len(reminders) == 1 and "CL-7K4Q" in reminders[0]["text"]
+    assert store().first("events", patient_id="p-chidi", event_type="invite_follow_up")
+
+
+def test_patient_without_email_is_flagged_for_the_care_team(client, mailbox):
+    from app.scheduler import invite_followups
+    invite = store().get("invites", "CL-7K4Q")
+    invite["created_at"] = iso(now() - timedelta(hours=25))
+    asyncio.run(invite_followups())
+    event = store().first("events", patient_id="p-chidi", event_type="invite_follow_up")
+    assert "no email address" in event["summary"] and not mailbox.sent

@@ -148,10 +148,12 @@ def call_context(call_id: str) -> dict:
     }
 
 
-def check_turn(call_id: str, text: str) -> dict:
+def check_turn(call_id: str, text: str, confidence: float | None = None) -> dict:
     call = _call(call_id)
     patient = _verified_patient(call)
-    check = safety.check(text or "")
+    check = safety.check(text or "", confidence)
+    if check.action == "clarify":
+        return {"action": "clarify"}
     if check.action == "confirm":  # Tomi's own prompt asks again; the worker only knows continue or escalate
         log_event(patient["id"], actor_type="system", actor_id="Safety engine", source_channel="voice", event_type="safety_check_asked",
                   summary=f'Mentioned {check.label} with a "no" during a call.', verification_status="system_recorded")

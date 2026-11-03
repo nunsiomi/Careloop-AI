@@ -4,7 +4,7 @@
 import { maskPhone } from './format.js';
 import { MESSAGE_CHANNELS } from './languages.js';
 
-const STORAGE_KEY = 'careloop-mock-v4';
+const STORAGE_KEY = 'careloop-mock-v5';
 const DEFAULT_FACILITY = 'Kestrel General Hospital';
 // The sample patients belong to whichever care facility the signed-in staff member chose (see setMockFacility).
 let FACILITY = DEFAULT_FACILITY;
@@ -133,12 +133,13 @@ function seed() {
   const graceNote = 'Discharge summary: Grace Bassey, Kestrel General Hospital.\nMetformin 500 mg tablet, one tablet twice daily with food at 08:00 and 20:00.\nReview at the Diabetes Clinic at 09:30.\nReturn to hospital at once for confusion or fainting.';
   const simpleNote = (name) => `Discharge summary: ${name}, Kestrel General Hospital.\nAmlodipine 5 mg tablet, one tablet every morning at 09:00 for 14 days.\nReview visit at Medical Outpatients.\nReturn to hospital at once for chest pain or trouble breathing.`;
 
+  const lead = { id: 'u-ada', name: REVIEWER };
   const patients = [
-    { id: 'p-zainab', name: 'Zainab Musa', age: 58, language: 'Hausa', literacy_level: 'basic', caregiver_mode: true, caregiver: { name: 'Hadiza Musa', relation: 'Daughter', scope: 'Reminders and help with tasks' }, phone_e164: '+2348000000101', email: 'zainab.musa@kestrelmail.ng', channels: ['web', 'voice', 'email'], contact_window: '08:00-11:00', pin_set: true, consent_at: at(-3, '09:00'), activation_status: 'active' },
-    { id: 'p-tola', name: 'Tola Adeyemi', age: 44, language: 'Yoruba', literacy_level: 'standard', caregiver_mode: false, caregiver: null, phone_e164: '+2348000000102', email: 'tola.adeyemi@kestrelmail.ng', channels: ['web', 'email', 'voice'], contact_window: '16:00-19:00', pin_set: true, consent_at: at(-6, '14:00'), activation_status: 'active' },
-    { id: 'p-chidi', name: 'Chidi Okeke', age: 63, language: 'Igbo', literacy_level: 'standard', caregiver_mode: false, caregiver: null, phone_e164: '+2348000000103', email: null, channels: [], contact_window: null, pin_set: false, consent_at: null, activation_status: 'invited' },
-    { id: 'p-grace', name: 'Grace Bassey', age: 51, language: 'English', literacy_level: 'standard', caregiver_mode: false, caregiver: null, phone_e164: '+2348000000104', email: 'grace.bassey@kestrelmail.ng', channels: [], contact_window: null, pin_set: false, consent_at: null, activation_status: 'plan_review' },
-    { id: 'p-ibrahim', name: 'Ibrahim Danjuma', age: 37, language: 'Hausa', literacy_level: 'basic', caregiver_mode: false, caregiver: null, phone_e164: '+2348000000105', email: null, channels: [], contact_window: null, pin_set: false, consent_at: null, activation_status: 'plan_review' }
+    { id: 'p-zainab', name: 'Zainab Musa', age: 58, language: 'Hausa', literacy_level: 'basic', caregiver_mode: true, caregiver: { name: 'Hadiza Musa', relation: 'Daughter', scope: 'Reminders and help with tasks' }, phone_e164: '+2348000000101', email: 'zainab.musa@kestrelmail.ng', channels: ['web', 'voice', 'email'], contact_window: '08:00-11:00', pin_set: true, consent_at: at(-3, '09:00'), activation_status: 'active', assigned_to: lead },
+    { id: 'p-tola', name: 'Tola Adeyemi', age: 44, language: 'Yoruba', literacy_level: 'standard', caregiver_mode: false, caregiver: null, phone_e164: '+2348000000102', email: 'tola.adeyemi@kestrelmail.ng', channels: ['web', 'email', 'voice'], contact_window: '16:00-19:00', pin_set: true, consent_at: at(-6, '14:00'), activation_status: 'active', assigned_to: lead },
+    { id: 'p-chidi', name: 'Chidi Okeke', age: 63, language: 'Igbo', literacy_level: 'standard', caregiver_mode: false, caregiver: null, phone_e164: '+2348000000103', email: null, channels: [], contact_window: null, pin_set: false, consent_at: null, activation_status: 'invited', assigned_to: lead },
+    { id: 'p-grace', name: 'Grace Bassey', age: 51, language: 'English', literacy_level: 'standard', caregiver_mode: false, caregiver: null, phone_e164: '+2348000000104', email: 'grace.bassey@kestrelmail.ng', channels: [], contact_window: null, pin_set: false, consent_at: null, activation_status: 'plan_review', assigned_to: lead },
+    { id: 'p-ibrahim', name: 'Ibrahim Danjuma', age: 37, language: 'Hausa', literacy_level: 'basic', caregiver_mode: false, caregiver: null, phone_e164: '+2348000000105', email: null, channels: [], contact_window: null, pin_set: false, consent_at: null, activation_status: 'plan_review', assigned_to: lead }
   ];
 
   const plans = [
@@ -1032,7 +1033,9 @@ export const mock = {
   async listPatients() { advanceAll(); return respond({ patients: db.patients.map(patientSummary) }); },
   async getPatient(id) { return respond({ patient: patientSummary(findPatient(id)) }); },
   async createPatient(input) {
-    const patient = { id: makeId('p'), age: null, caregiver: null, email: null, channels: [], contact_window: null, pin_set: false, consent_at: null, activation_status: 'plan_review', caregiver_mode: false, ...input };
+    // The person who adds a patient becomes their lead clinician (the real backend reads the session the same way).
+    const staff = JSON.parse(window.localStorage.getItem('careloop-session-staff') || 'null')?.user;
+    const patient = { id: makeId('p'), age: null, caregiver: null, email: null, channels: [], contact_window: null, pin_set: false, consent_at: null, activation_status: 'plan_review', caregiver_mode: false, assigned_to: staff ? { id: staff.id, name: staff.name } : null, ...input };
     db.patients.push(patient);
     logEvent(patient.id, { actor_type: 'clinician', actor_id: REVIEWER, source_channel: 'dashboard', event_type: 'patient_created', summary: 'Patient record created with discharge note.', verification_status: 'clinician_verified' });
     return respond({ patient: patientSummary(patient) });

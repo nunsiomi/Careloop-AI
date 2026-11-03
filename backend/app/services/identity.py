@@ -8,6 +8,7 @@ import os
 import secrets
 
 from app.adapters.email import send_email
+from app.agents import language as language_agent
 from app.db import store
 from app.security import check_code, check_secret, hash_code, hash_secret, new_session_token, password_problem, rate_limit, session_key
 from app.services.activity_log import log_event
@@ -316,11 +317,23 @@ async def create_patient_invite(patient: dict) -> dict:
     code = _invite_code("CL")
     invite = store().add("invites", {"id": code, "code": code, "kind": "patient", "patient_id": patient["id"], "facility": patient.get("facility"),
                                      "invited_by": patient.get("added_by") or patient.get("facility"), "status": "pending", "created_at": now_iso()})
-    if patient.get("email"):
-        await send_email(patient["email"], "Your care team set up CareLoop for you",
-                         f"Hello {first_name(patient['name'])}, {patient.get('facility') or 'your care team'} has set up CareLoop to help you follow your care plan.\n\n"
-                         f"Your invite code is {code}. Open {app_url('/patient/#/invite/' + code)} to start. The code works once.")
+    await send_welcome(patient, invite, reminder=False)
     return invite
+
+
+async def send_welcome(patient: dict, invite: dict, reminder: bool) -> bool:
+    """The welcome (or 24-hour reminder) email: in the patient's language when the Language Agent's checks pass,
+    always with the English underneath. Generic: it never names a medicine or condition. False if no address."""
+    if not patient.get("email"):
+        return False
+    link = app_url("/patient/#/invite/" + invite["code"])
+    opening = ("A reminder: " if reminder else "") + f"{patient.get('facility') or 'Your care team'} has set up CareLoop to help you follow your care plan."
+    english = f"Hello {first_name(patient['name'])}. {opening} Your invite code is {invite['code']}. Open {link} to start. The code works once."
+    translated = await language_agent.run({"text": english, "language": patient.get("language"), "reading_level": patient.get("literacy_level"),
+                                           "protected_terms": [invite["code"], link, first_name(patient["name"])]})
+    text = f"{translated['text']}\n\n{english}" if translated["adapted"] else english
+    subject = "Reminder: your CareLoop invite" if reminder else "Your care team set up CareLoop for you"
+    return (await send_email(patient["email"], subject, text)).ok
 
 
 # ======================================================================= care team
@@ -330,7 +343,8 @@ def _initials(name: str) -> str:
 
 
 def staff_view(user: dict) -> dict:
-    return {"id": user["id"], "name": user["name"], "email": user["email"], "role": user["role"], "facility": user["facility"], "initials": _initials(user["name"])}
+    return {"id": user["id"], "name": user["name"], "email": user["email"], "role": user["role"], "facility": user["facility"],
+            "initials": _initials(user["name"]), "is_admin": bool(user.get("is_admin"))}
 
 
 def _new_staff_session(user: dict, remember: bool, device: str) -> tuple[dict, str]:

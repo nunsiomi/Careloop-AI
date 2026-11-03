@@ -9,9 +9,9 @@ router = APIRouter()
 
 
 @router.post("/assistant/drafts")
-def draft(request: Request, body: dict = Body(default={})):
+async def draft(request: Request, body: dict = Body(default={})):
     actor = require_staff(request)
-    return {"draft": assistant.draft(body.get("text", ""), body.get("patient_id"), actor.facility)}
+    return {"draft": await assistant.draft_with_model(body.get("text", ""), body.get("patient_id"), actor.facility)}
 
 
 @router.post("/assistant/apply")

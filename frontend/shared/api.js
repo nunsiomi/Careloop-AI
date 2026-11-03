@@ -71,6 +71,12 @@ const http = {
   listStaffSessions: () => request('/auth/staff/sessions'),
   staffSignOut: (body) => request('/auth/staff/sign-out', { method: 'POST', body }),
 
+  listStaff: () => request('/staff'),
+  assignPatient: (patientId, body) => request(`/patients/${id(patientId)}/assignment`, { method: 'PATCH', body }),
+  getAdminFacility: () => request('/admin/facility'),
+  newJoinCode: () => request('/admin/join-code', { method: 'POST' }),
+  removeStaff: (staffId) => request(`/admin/staff/${id(staffId)}`, { method: 'DELETE' }),
+
   getSupportInfo: () => request('/support'),
   listSampleNotes: () => request('/demo/sample-notes'),
 

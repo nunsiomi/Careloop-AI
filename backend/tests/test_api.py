@@ -135,7 +135,7 @@ def test_red_flag_in_chat_opens_an_escalation_for_the_care_team(client, mailbox)
     sent = client.post("/api/patients/p-tola/messages", json={"original_text": "My chest hurts and I cannot breathe", "language": "Yoruba"}).json()
 
     assert sent["escalation"]["call_number"] == "112"
-    assert sent["reply"]["original_text"].startswith("This may need urgent care")
+    assert sent["reply"]["original_text"].endswith("This may need urgent care. Please go to the nearest hospital now, or call 112. I have sent this to your care team.")
     client.post("/api/auth/patient/sign-out")
     staff_sign_in(client, mailbox)
     open_items = client.get("/api/escalations", params={"status": "open"}).json()["escalations"]
@@ -249,3 +249,37 @@ def test_scripted_browser_voice_when_livekit_is_not_set_up(client, mailbox):
     assert greeting["pin_required"] is True
     after_pin = client.post(f"/api/voice/sessions/{session['id']}/input", json={"pin": "1234"}).json()
     assert after_pin["turns"][0]["transcript"].startswith("Thank you, Tola.")
+
+
+# ----- assignment and facility admin
+
+def test_patients_can_be_assigned_to_a_colleague(client, mailbox):
+    staff_sign_in(client, mailbox)
+    team = client.get("/api/staff").json()["staff"]
+    assert [member["name"] for member in team] == ["Dr. Ada Okafor"]
+    assert client.get("/api/patients/p-tola").json()["patient"]["assigned_to"]["id"] == "u-ada"
+
+    cleared = client.patch("/api/patients/p-tola/assignment", json={"staff_id": None}).json()["patient"]
+    assert cleared["assigned_to"] is None
+    assert client.patch("/api/patients/p-tola/assignment", json={"staff_id": "u-nobody"}).status_code == 400
+
+
+def test_admin_sees_the_join_code_changes_it_and_removes_staff(client, mailbox):
+    form = {"name": "Kemi Ade", "email": "kemi.ade@example.com", "password": "quiet-river-lantern-9", "facility_id": "kestrel",
+            "role": "Nurse", "confirmed": True, "join_code": "KGH-4821"}
+    started = client.post("/api/auth/staff/sign-up", json=form).json()
+    kemi = client.post("/api/auth/staff/sign-up/verify", json={"signup_token": started["signup_token"], "code": mailbox.last_code("kemi.ade@example.com")}).json()["session"]
+    assert kemi["user"]["is_admin"] is False
+    assert client.get("/api/admin/facility").status_code == 403
+    client.post("/api/auth/staff/sign-out", json={})
+
+    session = staff_sign_in(client, mailbox)
+    assert session["user"]["is_admin"] is True
+    page = client.get("/api/admin/facility").json()
+    assert page["facility"]["join_code"] == "KGH-4821" and page["staff"][0]["name"] == "Kemi Ade"  # newest first
+
+    new_code = client.post("/api/admin/join-code").json()["join_code"]
+    assert new_code.startswith("KGH-") and new_code != "KGH-4821"
+    assert client.delete(f"/api/admin/staff/{session['user']['id']}").status_code == 409
+    assert client.delete(f"/api/admin/staff/{page['staff'][0]['id']}").json()["ok"] is True
+    assert [member["name"] for member in client.get("/api/staff").json()["staff"]] == ["Dr. Ada Okafor"]

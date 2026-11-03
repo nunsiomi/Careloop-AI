@@ -130,3 +130,18 @@ def test_mock_context_matches_the_frontend_sample_patient():
     assert context["patient"]["language"] == "Hausa"
     assert context["consent"]["voice"] is True
     assert {task["id"] for task in context["tasks"]} == {"t-z1", "t-z3", "t-z4"}
+
+
+def test_unclear_transcripts_are_spotted():
+    from call_controller import transcript_unclear
+    assert all(transcript_unclear(text) for text in ["", "mm... ba...", "hmm", "uh uh"])
+    assert not any(transcript_unclear(text) for text in ["Eh", "Yes", "I took it", "Na sha", "Rara"])
+
+
+def test_every_language_has_every_line():
+    import json
+    from pathlib import Path
+    lines = json.loads((Path(__file__).parent / "prompts" / "lines.json").read_text(encoding="utf-8"))
+    keys = set(lines["en"])
+    assert {"not_clear", "handover"} <= keys
+    assert all(set(lines[code]) == keys for code in ("ha", "yo", "ig"))

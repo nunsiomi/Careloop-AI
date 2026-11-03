@@ -62,6 +62,7 @@ function Landing() {
         </section>
 
         <p className="landing-note">Tomi is an AI assistant, not a doctor. In an emergency, go to the nearest hospital or call 112.</p>
+        <p className="landing-note"><a href="patient/#/privacy">How CareLoop uses your information</a> and <a href="patient/#/terms">terms of use</a>.</p>
       </main>
     </>
   );

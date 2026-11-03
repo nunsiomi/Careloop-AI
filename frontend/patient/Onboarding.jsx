@@ -5,6 +5,7 @@ import { CHANNELS, CONTACT_WINDOWS, LANGUAGES, READING_LEVELS } from '../shared/
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 import { BetaChip } from '../shared/ui.jsx';
 import { LogoMark, SafetyFooter } from './parts.jsx';
+import { LegalLinks } from './Legal.jsx';
 import { preferredLanguage } from './Auth.jsx';
 
 const STEPS = ['welcome', 'language', 'reading', 'contact', 'consent'];
@@ -215,6 +216,7 @@ export default function Onboarding({ patient, editing, onDone, onCancel }) {
               <input type="checkbox" checked={agreed} onChange={(event) => setAgreed(event.target.checked)} />
               <span>I agree that CareLoop and Tomi can contact me in these ways about my care plan. Texts and emails will not say what my medicine is for.</span>
             </label>
+            <LegalLinks />
           </>
         )}
 

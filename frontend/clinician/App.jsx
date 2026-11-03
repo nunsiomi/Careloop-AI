@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Navigate, NavLink, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
-import { CalendarDays, Gauge, Lock, LogOut, MessageSquareText, Mic, PhoneCall, Settings, Siren, Users } from 'lucide-react';
+import { Building2, CalendarDays, Gauge, Lock, LogOut, MessageSquareText, Mic, PhoneCall, Settings, Siren, Users } from 'lucide-react';
 import { CareLoopAPI } from '../shared/api.js';
 import { PRESENTER } from '../shared/presenter.js';
 import { useIdle } from '../shared/auth-ui.jsx';
@@ -14,6 +14,7 @@ import Escalations from './pages/Escalations.jsx';
 import Calls from './pages/Calls.jsx';
 import Account from './pages/Account.jsx';
 import Reminders from './pages/Reminders.jsx';
+import Admin from './pages/Admin.jsx';
 import { ForgotPassword, JoinInvite, LockScreen, ResetPassword, SignIn, SignUp, VerifyMfa } from './Auth.jsx';
 import { DashboardContext } from './shell.jsx';
 import { AssistantPanel } from './Assistant.jsx';
@@ -118,6 +119,7 @@ function Dashboard({ session, onSignOut }) {
             <NavLink to="/escalations"><Siren aria-hidden="true" />Escalations{counts.unacknowledged > 0 && <span className="nav-count tone-red" aria-label={`${counts.unacknowledged} not acknowledged`}>{counts.unacknowledged}</span>}</NavLink>
             <NavLink to="/calls"><PhoneCall aria-hidden="true" />Calls</NavLink>
             <NavLink to="/reminders"><MessageSquareText aria-hidden="true" />Reminders{counts.failedMessages > 0 && <span className="nav-count tone-amber" aria-label={`${counts.failedMessages} not delivered`}>{counts.failedMessages}</span>}</NavLink>
+            {user.is_admin && <NavLink to="/admin"><Building2 aria-hidden="true" />Facility admin</NavLink>}
           </nav>
           <div className="dash-foot">
             <NavLink to="/account" className="dash-user">
@@ -144,6 +146,7 @@ function Dashboard({ session, onSignOut }) {
             <Route path="/calls" element={<Calls />} />
             <Route path="/reminders" element={<Reminders />} />
             <Route path="/account" element={<Account />} />
+            <Route path="/admin" element={user.is_admin ? <Admin /> : <Navigate to="/" replace />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </main>

@@ -51,7 +51,7 @@ def build() -> dict[str, list[dict]]:
         return (f"Discharge summary: {name}, Kestrel General Hospital.\nAmlodipine 5 mg tablet, one tablet every morning at 09:00 for 14 days.\n"
                 "Review visit at Medical Outpatients.\nReturn to hospital at once for chest pain or trouble breathing.")
 
-    base = {"facility": FACILITY, "facility_id": "kestrel", "timezone": "Africa/Lagos"}
+    base = {"facility": FACILITY, "facility_id": "kestrel", "timezone": "Africa/Lagos", "assigned_to": {"id": "u-ada", "name": REVIEWER}}
     patients = [
         {"id": "p-zainab", "name": "Zainab Musa", "age": 58, "language": "Hausa", "literacy_level": "basic", "caregiver_mode": True,
          "caregiver": {"name": "Hadiza Musa", "relation": "Daughter", "scope": "Reminders and help with tasks"}, "phone_e164": "+2348000000101",
@@ -214,7 +214,8 @@ def build() -> dict[str, list[dict]]:
     data = {
         "facilities": [{"id": fid, "type": kind, "name": name, "city": city, "country": country, "join_code": code} for fid, kind, name, city, country, code in FACILITIES],
         "staff": [{"id": "u-ada", "name": REVIEWER, "email": "ada.okafor@kestrelgeneral.ng", "password_hash": hash_secret("Blue-ward-morning-24"),
-                   "role": "Clinician reviewer", "facility": FACILITY, "facility_id": "kestrel", "failures": 0, "locked_until": None}],
+                   "role": "Clinician reviewer", "facility": FACILITY, "facility_id": "kestrel", "failures": 0, "locked_until": None,
+                   "is_admin": True, "created_at": at(-30, "09:00")}],
         "staff_invites": [{"id": "join-7f3k", "token": "join-7f3k", "name": "Bisi Ola", "email": "bisi.ola@kestrelgeneral.ng", "role": "Follow-up nurse",
                            "facility": FACILITY, "invited_by": REVIEWER, "status": "pending"}],
         "invites": [

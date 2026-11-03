@@ -26,7 +26,7 @@ class Backend(Protocol):
     async def start_call(self, *, direction: str, phone_e164: str | None, patient_id: str | None) -> dict: ...
     async def verify_pin(self, *, call_id: str, phone_e164: str | None, pin: str) -> dict: ...
     async def call_context(self, *, call_id: str, patient_id: str) -> dict: ...
-    async def check_turn(self, *, call_id: str, patient_id: str, text: str, language: str) -> dict: ...
+    async def check_turn(self, *, call_id: str, patient_id: str, text: str, language: str, confidence: float | None = None) -> dict: ...
     async def log_turn(self, *, call_id: str, speaker: str, text: str, language: str) -> None: ...
     async def record_task_update(self, *, call_id: str, patient_id: str, task_id: str, status: str, patient_words: str) -> dict: ...
     async def report_problem(self, *, call_id: str, patient_id: str, kind: str, patient_words: str, task_id: str | None) -> dict: ...
@@ -58,8 +58,9 @@ class HttpBackend:
         resp.raise_for_status()
         return resp.json()["context"]
 
-    async def check_turn(self, *, call_id, patient_id, text, language):
-        return await self._post(f"/voice/calls/{call_id}/turns/check", {"text": text, "language": language})
+    async def check_turn(self, *, call_id, patient_id, text, language, confidence=None):
+        body = {"text": text, "language": language, **({"confidence": confidence} if confidence is not None else {})}
+        return await self._post(f"/voice/calls/{call_id}/turns/check", body)
 
     async def log_turn(self, *, call_id, speaker, text, language):
         await self._post(f"/voice/calls/{call_id}/turns", {"speaker": speaker, "transcript": text, "language": language})
@@ -163,7 +164,7 @@ class MockBackend:
     async def call_context(self, *, call_id, patient_id):
         return self._context(patient_id)
 
-    async def check_turn(self, *, call_id, patient_id, text, language):
+    async def check_turn(self, *, call_id, patient_id, text, language, confidence=None):
         lowered = text.lower()
         for rule_id, pattern in _MOCK_RED_FLAGS.items():
             if re.search(pattern, lowered):
@@ -171,6 +172,8 @@ class MockBackend:
                 self.events.append({"type": "escalation_opened", **escalation})
                 logger.warning("red flag %s on call %s", rule_id, call_id)
                 return {"action": "escalate", "escalation": escalation}
+        if confidence is not None and confidence < 0.6:
+            return {"action": "clarify"}
         return {"action": "continue"}
 
     async def log_turn(self, *, call_id, speaker, text, language):

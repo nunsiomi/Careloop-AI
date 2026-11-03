@@ -7,6 +7,7 @@ import { LANGUAGES } from '../shared/languages.js';
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 import { BetaChip, ErrorNote, LoadingBlock, useAsync } from '../shared/ui.jsx';
 import { LogoMark, LoopArt, SafetyFooter } from './parts.jsx';
+import { LegalLinks } from './Legal.jsx';
 
 const LANG_KEY = 'careloop-language';
 export const preferredLanguage = () => window.localStorage.getItem(LANG_KEY);
@@ -64,6 +65,7 @@ export function WelcomeScreen({ go, notice }) {
         <button type="button" className="btn btn-secondary btn-lg btn-block" onClick={() => go('invite')}>I have an invite code</button>
       </div>
       <p className="hint">Looking after a family member? Use the invite code you were sent.</p>
+      <LegalLinks />
     </AuthShell>
   );
 }

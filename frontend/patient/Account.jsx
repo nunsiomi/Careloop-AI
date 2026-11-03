@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { LegalLinks } from './Legal.jsx';
 import { KeyRound, LogOut, Mail, MessageCircle, MessageSquareText, Phone, UserMinus, UserPlus } from 'lucide-react';
 import { CareLoopAPI } from '../shared/api.js';
 import { PhoneField } from '../shared/auth-ui.jsx';
@@ -47,6 +48,12 @@ export default function AccountScreen({ session, patient, headingRef, onSignOut,
           <button type="button" className="btn btn-secondary btn-lg" onClick={() => onSignOut()}><LogOut aria-hidden="true" size={20} />Sign out</button>
           <button type="button" className="btn btn-quiet btn-lg" onClick={() => setConfirmForget(true)}>Sign out and forget this phone</button>
         </div>
+      </section>
+
+      <section className="settings-group" aria-labelledby="set-legal">
+        <h2 id="set-legal" className="sheet-title">Your information</h2>
+        <p className="hint">You can ask your care team to show you, correct or delete what CareLoop keeps about you.</p>
+        <LegalLinks />
       </section>
 
       {confirmForget && (

@@ -5,8 +5,10 @@ is a fixed, approved sentence; nothing here writes new medical content. Safety: 
 services/chat.py. Escalations: services/escalations.py.
 """
 
+import json
 import os
 import re
+from pathlib import Path
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
@@ -36,6 +38,22 @@ def zone() -> ZoneInfo:
 
 def local(iso_text: str) -> datetime:
     return parse_iso(iso_text).astimezone(zone())
+
+
+LINES_PATH = Path(__file__).resolve().parents[3] / "voice" / "prompts" / "lines.json"
+LANGUAGE_CODES = {"Hausa": "ha", "Yoruba": "yo", "Igbo": "ig", "English": "en"}
+
+
+def emergency_in(language: str) -> dict:
+    """The emergency line is never machine-translated: Tomi's prepared line in the patient's language (the same one
+    she says on calls), then the approved English."""
+    code = LANGUAGE_CODES.get(language, "en")
+    try:
+        prepared = json.loads(LINES_PATH.read_text(encoding="utf-8"))[code]["emergency"] if code != "en" else None
+    except (OSError, ValueError, KeyError):
+        prepared = None
+    text = f"{prepared}\n\n{EMERGENCY_LINE}" if prepared else EMERGENCY_LINE
+    return {"text": text, "language": language if prepared else "English", "number_check_passed": True, "uncertainty_flags": []}
 
 
 def find_patient(patient_id: str) -> dict:

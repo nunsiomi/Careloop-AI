@@ -7,6 +7,7 @@ States follow section 7.3 of the project documentation.
 from __future__ import annotations
 
 import asyncio
+import re
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
@@ -196,3 +197,19 @@ class Keypad:
             typed += digit
             timeout = between_timeout
         return typed
+
+
+# Spitch gives no confidence score, so Tomi judges the transcript itself. Short answers in any of the four languages
+# are clear; a transcript of only fillers or single sounds ("mm... ba...") is not.
+SHORT_ANSWERS = {"yes", "no", "ok", "eh", "ee", "i", "aa", "a'a", "to", "mba", "oo", "ehn", "beeni", "rara", "kai"}
+FILLERS = {"mm", "mmm", "hmm", "uh", "um", "umm", "er", "erm", "ah"}
+
+
+def transcript_unclear(text: str) -> bool:
+    words = re.findall(r"[^\W\d_]+(?:'[^\W\d_]+)?", (text or "").lower())
+    if not words:
+        return True
+    if any(word in SHORT_ANSWERS for word in words):
+        return False
+    meaningful = [word for word in words if word not in FILLERS and len(word) >= 3]
+    return not meaningful

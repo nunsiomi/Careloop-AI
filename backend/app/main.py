@@ -21,7 +21,7 @@ load_dotenv(ROOT / ".env")
 
 from app import scheduler, seed  # noqa: E402  (after .env is loaded)
 from app.db import Store, set_store, store  # noqa: E402
-from app.routes import assistant, auth, care, voice  # noqa: E402
+from app.routes import admin, assistant, auth, care, voice  # noqa: E402
 from app.util import ApiError  # noqa: E402
 
 logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"))
@@ -68,7 +68,7 @@ def health():
     return {"ok": True}
 
 
-for router in (auth.router, care.router, voice.router, voice.worker, assistant.router):
+for router in (auth.router, care.router, voice.router, voice.worker, assistant.router, admin.router):
     app.include_router(router, prefix="/api")
 
 DIST = ROOT / "frontend" / "dist"

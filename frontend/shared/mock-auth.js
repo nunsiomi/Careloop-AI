@@ -5,7 +5,7 @@ import { maskPhone, normalizePhone } from './format.js';
 import { mockDb, mockPersist, setMockFacility } from './mock-server.js';
 
 // Bump the version whenever the seeded accounts change, so browsers drop their old saved copy.
-const AUTH_KEY = 'careloop-auth-v5';
+const AUTH_KEY = 'careloop-auth-v6';
 const SESSION_KEY = { patient: 'careloop-session-patient', staff: 'careloop-session-staff' };
 const DEMO_PIN = '1234';
 const CODE_TTL = 300; // seconds a sign-in code stays valid
@@ -34,6 +34,7 @@ const FACILITIES = [
 ];
 const STAFF_ROLES = ['Doctor', 'Nurse', 'Follow-up nurse', 'Pharmacist', 'Pharmacy technician', 'Carer', 'Care coordinator'];
 const EMAIL_FROM = 'CareLoop';
+const ADMIN_ONLY = "Only your facility's CareLoop admin can open this page.";
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
 function seedAuth() {
@@ -51,7 +52,7 @@ function seedAuth() {
       { id: 'cg-1', patient_id: 'p-zainab', name: 'Hadiza Musa', relation: 'Daughter', phone_e164: '+2348000000201', email: 'hadiza.musa@kestrelmail.ng', scope: 'Reminders and help with tasks', added_at: new Date(Date.now() - 3 * 864e5).toISOString() }
     ],
     staff: [
-      { id: 'u-ada', name: 'Dr. Ada Okafor', email: 'ada.okafor@kestrelgeneral.ng', password: 'Blue-ward-morning-24', role: 'Clinician reviewer', facility: FACILITY, mfa: true, mfa_method: 'email', failures: 0, locked_until: null }
+      { id: 'u-ada', name: 'Dr. Ada Okafor', email: 'ada.okafor@kestrelgeneral.ng', password: 'Blue-ward-morning-24', role: 'Clinician reviewer', facility: FACILITY, mfa: true, mfa_method: 'email', failures: 0, locked_until: null, is_admin: true, created_at: new Date(Date.now() - 30 * 864e5).toISOString() }
     ],
     staff_invites: {
       'join-7f3k': { token: 'join-7f3k', name: 'Bisi Ola', email: 'bisi.ola@kestrelgeneral.ng', role: 'Follow-up nurse', facility: FACILITY, invited_by: 'Dr. Ada Okafor', status: 'pending' }
@@ -483,12 +484,62 @@ export const authMock = {
     return ok({ ok: true }, 120);
   },
 
+  /* Care team at the signed-in person's facility, assignment, and the facility admin page */
+  async listStaff() {
+    const session = readSession('staff');
+    if (!session) return fail('Your session has ended. Sign in again.', 401);
+    return ok({ staff: auth.staff.filter((item) => item.facility === session.user.facility).map(({ id, name, role }) => ({ id, name, role })) }, 80);
+  },
+  async assignPatient(patientId, { staff_id }) {
+    const session = readSession('staff');
+    if (!session) return fail('Your session has ended. Sign in again.', 401);
+    const patient = db().patients.find((item) => item.id === patientId);
+    const lead = staff_id ? auth.staff.find((item) => item.id === staff_id && item.facility === session.user.facility) : null;
+    if (staff_id && !lead) return fail('Choose someone from your care team.');
+    patient.assigned_to = lead ? { id: lead.id, name: lead.name } : null;
+    const stamp = new Date().toISOString();
+    db().events.push({ id: token('ev'), patient_id: patientId, reported_at: stamp, recorded_at: stamp, actor_type: 'clinician', actor_id: session.user.name, source_channel: 'dashboard', event_type: 'patient_assigned', summary: lead ? `Lead clinician set to ${lead.name}.` : 'Lead clinician removed.', verification_status: 'clinician_verified', supersedes_event_id: null });
+    return ok({ patient: { ...patient } });
+  },
+  async getAdminFacility() {
+    const { session, facility } = adminContext();
+    if (!session) return fail(ADMIN_ONLY, 403);
+    const staff = auth.staff.filter((item) => item.facility === facility.name).map((item) => {
+      const seen = auth.staff_sessions.filter((entry) => entry.user_id === item.id).map((entry) => entry.last_seen_at).sort().at(-1) || null;
+      return { id: item.id, name: item.name, email: item.email, role: item.role, is_admin: Boolean(item.is_admin), joined_at: item.created_at || null, last_seen_at: seen };
+    }).sort((first, second) => (second.joined_at || '').localeCompare(first.joined_at || ''));
+    const { id, type, name, city, country, join_code } = facility;
+    return ok({ facility: { id, type, name, city, country, join_code }, staff });
+  },
+  async newJoinCode() {
+    const { session, facility } = adminContext();
+    if (!session) return fail(ADMIN_ONLY, 403);
+    facility.join_code = `${facility.join_code.split('-')[0]}-${Math.floor(1000 + Math.random() * 9000)}`;
+    return ok({ join_code: facility.join_code });
+  },
+  async removeStaff(staffId) {
+    const { session, facility } = adminContext();
+    if (!session) return fail(ADMIN_ONLY, 403);
+    if (staffId === session.user.id) return fail('You cannot remove your own account.', 409);
+    auth.staff = auth.staff.filter((item) => item.id !== staffId || item.facility !== facility.name);
+    auth.staff_sessions = auth.staff_sessions.filter((item) => item.user_id !== staffId);
+    db().patients.forEach((patient) => { if (patient.assigned_to?.id === staffId) patient.assigned_to = null; });
+    return ok({ ok: true });
+  },
+
   resetAuth() {
     auth = seedAuth();
     writeSession('patient', null);
     save();
   }
 };
+
+function adminContext() {
+  const session = readSession('staff');
+  const user = session && auth.staff.find((item) => item.id === session.user.id);
+  if (!user?.is_admin) return {};
+  return { session, facility: FACILITIES.find((item) => item.name === user.facility) };
+}
 
 function emailCodeMessage(code, purpose) {
   return { channel: 'email', from: EMAIL_FROM, text: `${code} is your code to ${purpose}. It works for 15 minutes. If you did not ask for it, ignore this email.` };
@@ -498,7 +549,7 @@ function existingAccountMessage() {
 }
 
 function newStaffUser(account) {
-  const user = { id: token('u'), ...account, mfa: true, mfa_method: 'email', failures: 0, locked_until: null };
+  const user = { id: token('u'), ...account, mfa: true, mfa_method: 'email', failures: 0, locked_until: null, is_admin: false, created_at: new Date().toISOString() };
   auth.staff.push(user);
   return user;
 }
@@ -509,7 +560,7 @@ function staffSession(user, rememberDevice) {
   Object.values(auth.invites).forEach((invite) => { invite.facility = user.facility; });
   const session = {
     id: token('ss'),
-    user: { id: user.id, name: user.name, email: user.email, role: user.role, facility: user.facility, initials: user.name.replace(/^Dr\.\s*/, '').split(' ').map((part) => part[0]).join('').slice(0, 2) },
+    user: { id: user.id, name: user.name, email: user.email, role: user.role, facility: user.facility, initials: user.name.replace(/^Dr\.\s*/, '').split(' ').map((part) => part[0]).join('').slice(0, 2), is_admin: Boolean(user.is_admin) },
     remember_device: rememberDevice,
     idle_lock_minutes: 15,
     expires_at: inSeconds(12 * 3600)

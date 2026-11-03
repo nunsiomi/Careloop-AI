@@ -12,7 +12,9 @@
     "verified": "Thank you, {first_name}.",
     "emergency": "If you feel very unwell, go to the nearest hospital now. I have sent a message to your care team.",
     "goodbye": "Thank you. Goodbye.",
-    "unavailable": "Sorry, Tomi cannot help right now. Please contact your care team. Goodbye."
+    "unavailable": "Sorry, Tomi cannot help right now. Please contact your care team. Goodbye.",
+    "not_clear": "Sorry, I did not catch that. Please say it again.",
+    "handover": "I am having trouble hearing you. I will ask your care team to contact you. If you feel very unwell, go to the nearest hospital now."
   },
   "ha": {
     "checked": false,
@@ -26,7 +28,9 @@
     "verified": "Na gode, {first_name}.",
     "emergency": "Idan kuna jin rashin lafiya sosai, ku je asibiti mafi kusa yanzu. Na aika saƙo ga ma'aikatan lafiyarku.",
     "goodbye": "Na gode. Sai an jima.",
-    "unavailable": "Yi haƙuri, Tomi ba za ta iya taimakawa yanzu ba. Don Allah ku tuntuɓi ma'aikatan lafiyarku. Sai an jima."
+    "unavailable": "Yi haƙuri, Tomi ba za ta iya taimakawa yanzu ba. Don Allah ku tuntuɓi ma'aikatan lafiyarku. Sai an jima.",
+    "not_clear": "Yi haƙuri, ban ji abin da kuka faɗa ba. Don Allah ku sake faɗa.",
+    "handover": "Ina samun wahalar jin ku. Zan roƙi ma'aikatan lafiyarku su tuntuɓe ku. Idan kuna jin rashin lafiya sosai, ku je asibiti mafi kusa yanzu."
   },
   "yo": {
     "checked": false,
@@ -40,7 +44,9 @@
     "verified": "Ẹ ṣé, {first_name}.",
     "emergency": "Tí ara yín kò bá yá rárá, ẹ lọ sí ilé ìwòsàn tó sún mọ́ yín jù lọ báyìí. Mo ti fi iṣẹ́ ránṣẹ́ sí àwọn olùtọ́jú yín.",
     "goodbye": "Ẹ ṣé. Ó dàbọ̀.",
-    "unavailable": "Ẹ má bínú, Tomi kò lè ràn yín lọ́wọ́ báyìí. Ẹ jọ̀wọ́ ẹ kàn sí àwọn olùtọ́jú yín. Ó dàbọ̀."
+    "unavailable": "Ẹ má bínú, Tomi kò lè ràn yín lọ́wọ́ báyìí. Ẹ jọ̀wọ́ ẹ kàn sí àwọn olùtọ́jú yín. Ó dàbọ̀.",
+    "not_clear": "Ẹ má bínú, mi ò gbọ́ ohun tí ẹ sọ. Ẹ jọ̀wọ́ ẹ tún un sọ.",
+    "handover": "Ó ṣòro fún mi láti gbọ́ yín. Màá sọ fún àwọn olùtọ́jú yín pé kí wọ́n kàn sí yín. Tí ara yín kò bá yá rárá, ẹ lọ sí ilé ìwòsàn tó sún mọ́ yín jù lọ báyìí."
   },
   "ig": {
     "checked": false,
@@ -54,6 +60,8 @@
     "verified": "Daalụ, {first_name}.",
     "emergency": "Ọ bụrụ na ahụ adịghị gị mma nke ukwuu, gaa n'ụlọ ọgwụ kacha nso ugbu a. Ezitela m ozi nye ndị na-elekọta gị.",
     "goodbye": "Daalụ. Ka ọ dị.",
-    "unavailable": "Ndo, Tomi enweghị ike inyere gị aka ugbu a. Biko kpọtụrụ ndị na-elekọta gị. Ka ọ dị."
+    "unavailable": "Ndo, Tomi enweghị ike inyere gị aka ugbu a. Biko kpọtụrụ ndị na-elekọta gị. Ka ọ dị.",
+    "not_clear": "Ndo, anụghị m ihe i kwuru. Biko kwughachi ya.",
+    "handover": "Ọ na-esiri m ike ịnụ olu gị. Aga m agwa ndị na-elekọta gị ka ha kpọtụrụ gị. Ọ bụrụ na ahụ adịghị gị mma nke ukwuu, gaa n'ụlọ ọgwụ kacha nso ugbu a."
   }
 }

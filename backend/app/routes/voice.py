@@ -113,7 +113,8 @@ def worker_context(call_id: str):
 
 @worker.post("/voice/calls/{call_id}/turns/check")
 def worker_check_turn(call_id: str, body: dict = Body(default={})):
-    return voice.check_turn(call_id, str(body.get("text", "")))
+    confidence = body.get("confidence")
+    return voice.check_turn(call_id, str(body.get("text", "")), float(confidence) if isinstance(confidence, (int, float)) else None)
 
 
 @worker.post("/voice/calls/{call_id}/turns")

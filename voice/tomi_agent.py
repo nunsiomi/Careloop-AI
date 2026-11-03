@@ -54,6 +54,7 @@ from call_controller import (
     CallState,
     Keypad,
     language_code,
+    transcript_unclear,
 )
 
 load_dotenv()
@@ -178,6 +179,7 @@ class TomiAgent(Agent):
         self.voices = voices
         self.context = context
         self.lang = lang
+        self.unclear_turns = 0
 
     @property
     def patient_id(self) -> str:
@@ -209,7 +211,10 @@ class TomiAgent(Agent):
         self.controller.to(CallState.SAFETY_AND_ACTION)
         try:
             verdict = await self.backend.check_turn(
-                call_id=self.controller.call_id, patient_id=self.patient_id, text=text, language=self.lang
+                call_id=self.controller.call_id, patient_id=self.patient_id, text=text, language=self.lang,
+                # Spitch gives no confidence score; an unclear transcript is sent as low confidence so a danger
+                # word in it still escalates (the backend's safe path).
+                confidence=0.4 if transcript_unclear(text) else None,
             )
         except Exception:
             logger.exception("safety check failed")
@@ -229,6 +234,20 @@ class TomiAgent(Agent):
             except RuntimeError:
                 pass  # no room outside a real job (tests)
             raise StopResponse()
+
+        if verdict.get("action") == "clarify":
+            # Never guess at unclear speech: ask again, and after two unclear turns hand over to people.
+            self.unclear_turns += 1
+            if self.unclear_turns >= 2:
+                self.unclear_turns = 0
+                asyncio.ensure_future(self.backend.ask_care_team(
+                    call_id=self.controller.call_id, patient_id=self.patient_id,
+                    question="Tomi could not understand the patient twice on this call. Please contact them."))
+                self.voices.say(self.session, self.lang, line(self.lang, "handover"), interruptible=False)
+            else:
+                self.voices.say(self.session, self.lang, line(self.lang, "not_clear"))
+            raise StopResponse()
+        self.unclear_turns = 0
 
         self.controller.to(CallState.SPEAKING)
 

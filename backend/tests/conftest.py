@@ -29,6 +29,16 @@ class Mailbox:
         raise AssertionError(f"no email to {to}")
 
 
+@pytest.fixture(autouse=True)
+def no_real_model_calls(monkeypatch):
+    """Any model call a test does not mock fails fast instead of reaching Groq (agents then use their fallbacks)."""
+    def offline():
+        raise ValueError("model calls are off in tests")
+    from app.agents import checkin, llm
+    monkeypatch.setattr(llm, "groq_client", offline)
+    monkeypatch.setattr(checkin, "groq_client", offline)
+
+
 @pytest.fixture
 def mailbox(monkeypatch):
     box = Mailbox()
