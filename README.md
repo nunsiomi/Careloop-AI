@@ -30,6 +30,7 @@ item, tick it there in the same commit as the work.
 | [docs/architecture.md](docs/architecture.md) | How the frontend is built, and what has changed since documentation v2.1 |
 | [docs/api_shapes.md](docs/api_shapes.md) | API contract the backend must follow (the frontend mocks follow it too) |
 | [voice/README.md](voice/README.md) | Tomi's voice worker: how a call goes, the keys it needs, how to run it |
+| [docs/plan-review-criteria.md](docs/plan-review-criteria.md) | What the plan checks flag, and what a clinician checks before approving a plan |
 | [docs/demo-script.md](docs/demo-script.md) | Click-through for teammates and judges, with every sign-in |
 | [docs/clinical-safety-review.md](docs/clinical-safety-review.md) | Clinical mentor sign-off (still to be written) |
 | [CLAUDE.md](CLAUDE.md) | Rules for contributors and AI coding assistants |
@@ -97,8 +98,8 @@ Careloop-AI/
 │   │   ├── db.py, models.py      database (Olamide)
 │   │   ├── orchestrator.py       runs the agents in order
 │   │   ├── scheduler.py          reminders and check-ins
-│   │   ├── agents/               care_plan, plan_verifier (Mary), checkin, escalation, barrier (Dorcas),
-│   │   │                         language (Nunsi)
+│   │   ├── agents/               care_plan, plan_verifier, plan_rules (Mary), checkin, escalation,
+│   │   │                         barrier (Dorcas), language (Nunsi); prompts/ holds their system prompts
 │   │   ├── safety/               rules.py, red_flags.json, number_check.py (Dorcas)
 │   │   ├── services/             identity, consent, appointments, notifications, activity_log
 │   │   └── adapters/             sms, email, telephony, spitch
@@ -113,9 +114,9 @@ Careloop-AI/
 │   └── Dockerfile, requirements.txt
 │
 ├── data/                         synthetic data only
-│   ├── synthetic_patients.json
-│   ├── resources.json
-│   └── sample_discharges/
+│   ├── synthetic_patients.json   the five sample patients, matching the frontend mock
+│   ├── resources.json            approved contacts for the Barrier Agent
+│   └── sample_discharges/        five discharge notes with seeded errors, and expected.json for the tests
 │
 ├── notebooks/                    agent experiments only; production imports backend/app/agents/*.py
 │
@@ -124,6 +125,7 @@ Careloop-AI/
     ├── launch-checklist.md
     ├── architecture.md
     ├── api_shapes.md             API contract (api-contract.md points here)
+    ├── plan-review-criteria.md
     ├── demo-script.md
     └── clinical-safety-review.md
 ```
@@ -184,6 +186,8 @@ and play an incoming Tomi call. `?presenter=0` hides them again.
 
 Copy `.env.example` to `.env` and fill it in. Never commit `.env`. The keys, and where to get them, are in section 1
 of [docs/launch-checklist.md](docs/launch-checklist.md). Python packages are in `requirements.txt`.
+
+Run the backend tests from `backend/` with `python -m pytest tests`. They need no keys: the model is mocked.
 
 ## Team preview (Vercel)
 
