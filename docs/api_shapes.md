@@ -51,6 +51,13 @@ Routes follow section 11 of the project documentation v2. Routes marked *(added)
 
 The UI highlights `verifier_issues[].source_text` inside `source_note`, so it must be an exact substring.
 
+Where a plan comes from (backend only; Pydantic models in `backend/app/models.py`): the Care Plan Agent
+(`agents/care_plan.py`) takes `{ source_note, patient: { name } }` and returns
+`{ plan, unresolved: [issue], deliverable, error? }`; the Plan Verifier (`agents/plan_verifier.py`) takes
+`{ source_note, plan, patient }` and returns `{ verdict: "clean | flagged", issues: [issue], deliverable, model_checked }`.
+The orchestrator stores the verifier's `issues` as `verifier_issues`, and must not send the plan to the patient
+while `deliverable` is false or before a clinician approves it. Severity rules: `docs/plan-review-criteria.md`.
+
 ### Task
 
 ```json

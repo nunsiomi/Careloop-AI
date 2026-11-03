@@ -6,15 +6,15 @@ add the date and who did it, and commit the change with the work.
 Owners follow the README branches: **Nunsi** (frontend, language, voice), **Olamide** (backend core),
 **Mary** (care plan agents), **Dorcas** (check-in, escalation, safety).
 
-Last updated: 2 Nov 2026
+Last updated: 3 Nov 2026
 
 ## Progress
 
 | Section | Done |
 |---|---|
 | 1. Accounts and keys | 0 / 11 |
-| 2. Backend core | 0 / 12 |
-| 3. Agents | 0 / 8 |
+| 2. Backend core | 1 / 13 |
+| 3. Agents | 2 / 9 |
 | 4. Safety | 0 / 5 |
 | 5. Tomi voice | 0 / 6 |
 | 6. Frontend | 4 / 12 |
@@ -29,6 +29,7 @@ Apply for the SMS sender ID and the voice number first; they can take days or we
 
 - [ ] **Groq API key** (console.groq.com) → `GROQ_API_KEY`. Pick the model for the agents and set `GROQ_MODEL`.
   Check the free-tier rate limits before the judges' demo; upgrade if several people will test at once. — Nunsi
+  Key works with `openai/gpt-oss-120b` (Tomi, Care Plan Agent and Plan Verifier, 3 Nov 2026); rate limits not checked yet.
 - [ ] **Spitch API key** for Hausa, Yoruba and Igbo speech → `SPITCH_API_KEY`. Test it on medical words early. — Nunsi
 - [ ] **LiveKit Cloud** project → `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`. — Nunsi
 - [ ] **Phone number for Tomi calls**: Africa's Talking (`AT_USERNAME`, `AT_API_KEY`) or Twilio (`TWILIO_*`).
@@ -49,7 +50,12 @@ The contract is `docs/api_shapes.md`. Each route should return exactly what the 
 
 - [ ] Database models: hospitals, staff, patients, caregivers, invites, plans, tasks, events, appointments,
   escalations, calls, notifications. — Olamide
-- [ ] Seed data: `data/synthetic_patients.json`, `data/resources.json`, sample discharge notes in `data/sample_discharges/`. — Mary
+- [x] Seed data: `data/synthetic_patients.json`, `data/resources.json`, sample discharge notes in `data/sample_discharges/`. — Mary
+  (done by Nunsi, 3 Nov 2026: five patients matching the frontend mock, five barrier contacts, five notes with
+  seeded dose and date errors plus `expected.json`)
+- [ ] Plan flow in the orchestrator: on `POST /patients`, run the Care Plan Agent then the Plan Verifier, store the
+  verifier's `issues` as `verifier_issues`, and never send a plan while `deliverable` is false or before a
+  clinician approves (`docs/api_shapes.md`, "Plan"). — Olamide
 - [ ] Patient sign-in: code by SMS or voice call, PIN on a remembered phone, invite codes, caregivers. — Olamide
 - [ ] Staff sign-in: password, 6-digit email code, password reset, idle lock. — Olamide
 - [ ] Staff sign-up with hospital join code (lockout after 5 wrong codes), invite links. Never return `demo_join_code`. — Olamide
@@ -61,15 +67,23 @@ The contract is `docs/api_shapes.md`. Each route should return exactly what the 
 - [ ] Provider adapters for SMS, email and calls, with signed delivery-report webhooks. — Olamide
 - [ ] Each staff account sees only its own hospital's patients (checked on every route). — Olamide
 - [ ] Tests: the acceptance tests in section 17 of the project documentation. — All
+  Care plan integrity done 3 Nov 2026 (`backend/tests/test_plan_verifier.py`, `test_care_plan.py`); the other
+  areas are still to write.
 
 ## 3. Agents (Groq)
 
 All agents call Groq through one shared client, so the model can be changed in one place.
 
 - [ ] Shared Groq client: model from `GROQ_MODEL`, timeouts, retries, JSON output checked against a schema. — Olamide
-- [ ] Care Plan Agent: discharge note → draft plan for clinician review. — Mary
-- [ ] Plan Verifier Agent: flags anything in the draft not found in the note. — Mary
+- [x] Care Plan Agent: discharge note → draft plan for clinician review. — Mary (done by Nunsi, 3 Nov 2026:
+  `agents/care_plan.py`; removes anything the note does not support; run on the five sample notes with Groq)
+- [x] Plan Verifier Agent: flags anything in the draft not found in the note. — Mary (done by Nunsi, 3 Nov 2026:
+  rule checks in `agents/plan_rules.py` always run, then a model pass; review rules in `docs/plan-review-criteria.md`;
+  notebook `notebooks/care_plan_verifier.ipynb`)
+- [ ] Mary reviews the plan agents, the seeded notes and `docs/plan-review-criteria.md`, and agrees the plan
+  schema (`backend/app/models.py`) with Olamide. — Mary
 - [ ] Check-in Agent: Tomi's daily check-ins in chat. — Dorcas
+  Module merged 3 Nov 2026 (PR #1) and fixed (async Groq, barrier types, task checks); tick once chat uses it.
 - [ ] Barrier Agent: cost, transport and distance problems → hospital resources. — Dorcas
 - [ ] Escalation Agent: red flags → open escalation on the dashboard. — Dorcas
 - [ ] Language Agent: Hausa, Yoruba, Igbo and plain English, reading level checks. — Nunsi

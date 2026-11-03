@@ -1,0 +1,88 @@
+{
+  "_about": "Synthetic discharge notes for the Care Plan Agent and Plan Verifier (project documentation, section 17: five notes with seeded dose and date errors). Every name, facility and record is invented. For each note: the faithful plan (only what the note says; empty where it says nothing) and the issues the verifier must raise on that plan. backend/tests/test_plan_verifier.py checks both.",
+  "zainab-musa.txt": {
+    "patient_id": "p-zainab",
+    "seeded": "Bisoprolol has no strength (the incomplete dose line in the section 16 demo).",
+    "plan": {
+      "medications": [
+        { "name": "Amlodipine 5 mg tablet", "dose": "1 tablet", "frequency": "Every morning", "times": ["08:00"], "duration": "30 days", "instructions": "" },
+        { "name": "Bisoprolol tablet", "dose": "1 tablet", "frequency": "Every evening", "times": ["20:00"], "duration": "30 days", "instructions": "" }
+      ],
+      "appointments": [{ "what": "Follow-up", "where": "Heart Clinic, room 3", "date": "2026-11-06", "time": "10:00" }],
+      "tests": [{ "name": "Kidney function blood test", "where": "Hospital laboratory", "date": "" }],
+      "symptoms_to_watch": ["Chest pain", "Trouble breathing", "Fainting"],
+      "reminder_times": ["08:00", "20:00"]
+    },
+    "issues": [
+      { "field": "medications[1].name", "severity": "high" },
+      { "field": "tests[0].date", "severity": "medium" }
+    ]
+  },
+  "tola-adeyemi.txt": {
+    "patient_id": "p-tola",
+    "seeded": "Nothing: a complete note, so the verdict must be clean.",
+    "plan": {
+      "medications": [
+        { "name": "Amlodipine 5 mg tablet", "dose": "1 tablet", "frequency": "Every morning", "times": ["09:00"], "duration": "14 days", "instructions": "" }
+      ],
+      "appointments": [{ "what": "Review visit", "where": "Medical Outpatients", "date": "2026-11-15", "time": "11:30" }],
+      "tests": [],
+      "symptoms_to_watch": ["Chest pain", "Trouble breathing"],
+      "reminder_times": ["09:00"]
+    },
+    "issues": []
+  },
+  "chidi-okeke.txt": {
+    "patient_id": "p-chidi",
+    "seeded": "Two different lisinopril strengths (10 mg and 5 mg), and a test date that does not exist (31 November).",
+    "plan": {
+      "medications": [
+        { "name": "Lisinopril 10 mg tablet", "dose": "1 tablet", "frequency": "Every morning", "times": ["09:00"], "duration": "28 days", "instructions": "" },
+        { "name": "Furosemide 40 mg tablet", "dose": "1 tablet", "frequency": "Every morning", "times": ["09:00"], "duration": "5 days", "instructions": "" }
+      ],
+      "appointments": [{ "what": "Review", "where": "Medical Outpatients", "date": "2026-11-14", "time": "14:00" }],
+      "tests": [{ "name": "Kidney blood test", "where": "Hospital laboratory", "date": "" }],
+      "symptoms_to_watch": ["Chest pain", "Trouble breathing", "Swollen legs"],
+      "reminder_times": ["09:00"]
+    },
+    "issues": [
+      { "field": "medications[0].name", "severity": "high" },
+      { "field": "tests[0].date", "severity": "high" }
+    ]
+  },
+  "grace-bassey.txt": {
+    "patient_id": "p-grace",
+    "seeded": "The review visit has a time but no date.",
+    "plan": {
+      "medications": [
+        { "name": "Metformin 500 mg tablet", "dose": "1 tablet", "frequency": "Twice daily with food", "times": ["08:00", "20:00"], "duration": "", "instructions": "With food" }
+      ],
+      "appointments": [{ "what": "Review", "where": "Diabetes Clinic", "date": "", "time": "09:30" }],
+      "tests": [],
+      "symptoms_to_watch": ["Confusion", "Fainting"],
+      "reminder_times": ["08:00", "20:00"]
+    },
+    "issues": [
+      { "field": "appointments[0].date", "severity": "medium" }
+    ]
+  },
+  "ibrahim-danjuma.txt": {
+    "patient_id": "p-ibrahim",
+    "seeded": "\"Take as directed\" gives no amount or frequency, and \"next week\" is not a date.",
+    "plan": {
+      "medications": [
+        { "name": "Amoxicillin 500 mg capsule", "dose": "", "frequency": "", "times": [], "duration": "7 days", "instructions": "" }
+      ],
+      "appointments": [{ "what": "Wound check", "where": "Wound Clinic", "date": "", "time": "" }],
+      "tests": [],
+      "symptoms_to_watch": ["High fever", "Spreading redness"],
+      "reminder_times": []
+    },
+    "issues": [
+      { "field": "medications[0].dose", "severity": "high" },
+      { "field": "medications[0].frequency", "severity": "high" },
+      { "field": "appointments[0].date", "severity": "medium" },
+      { "field": "appointments[0].time", "severity": "medium" }
+    ]
+  }
+}
