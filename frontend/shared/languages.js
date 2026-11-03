@@ -17,11 +17,17 @@ export const READING_LEVELS = [
   { id: 'caregiver', title: 'I help someone with care', detail: 'For a family member or helper.' }
 ];
 
+// Text messages are switched off until CareLoop has an SMS provider (decided by Nunsi, 3 Nov 2026). Reminders
+// and sign-in codes go by email instead. Set this to true to bring SMS back everywhere.
+export const SMS_AVAILABLE = false;
+// Channels that carry generic reminder texts, in order of preference.
+export const MESSAGE_CHANNELS = SMS_AVAILABLE ? ['sms', 'email'] : ['email'];
+
 export const CHANNELS = [
   { id: 'web', title: 'Chat in this app', detail: 'See your plan and message Tomi here.' },
   { id: 'voice', title: 'Phone calls from Tomi', detail: 'Tomi calls at your chosen time to check in. You can always call Tomi too.' },
-  { id: 'sms', title: 'Text message reminders', detail: 'A short text before each medicine and the evening before a visit. It never says what the medicine is for.' },
-  { id: 'email', title: 'Email reminders', detail: 'The same reminders by email, with a link back to this app.' }
+  { id: 'email', title: 'Email reminders', detail: 'A short email before each medicine and the evening before a visit, with a link back to this app. It never says what the medicine is for.' },
+  { id: 'sms', title: 'Text message reminders', detail: 'A short text before each medicine and the evening before a visit. It never says what the medicine is for.', available: SMS_AVAILABLE, unavailable: 'Coming soon. Use email reminders for now.' }
 ];
 
 export const CONTACT_WINDOWS = [

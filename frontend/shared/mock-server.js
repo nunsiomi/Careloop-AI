@@ -2,8 +2,9 @@
 // names are kept realistic so the product reads naturally, but none of it refers to a real patient or place.
 // Clinical wording lives here, standing in for the backend; UI components never write it.
 import { maskPhone } from './format.js';
+import { MESSAGE_CHANNELS } from './languages.js';
 
-const STORAGE_KEY = 'careloop-mock-v3';
+const STORAGE_KEY = 'careloop-mock-v4';
 const DEFAULT_FACILITY = 'Kestrel General Hospital';
 // The sample patients belong to whichever care facility the signed-in staff member chose (see setMockFacility).
 let FACILITY = DEFAULT_FACILITY;
@@ -31,9 +32,9 @@ const SAMPLE_NOTES = [
   { id: 'note-c', title: 'Sample C: diabetes review', text: 'Discharge summary, Kestrel General Hospital.\nMetformin 500 mg tablet, one tablet twice daily with food at 08:00 and 20:00.\nReview at the Diabetes Clinic in 14 days at 09:30.\nReturn to hospital at once for confusion or fainting.' }
 ];
 
-/* ---------- SMS and email reminders (doc v2, section 8) ----------
+/* ---------- Email (and later SMS) reminders (doc v2, section 8) ----------
    Texts and emails are generic: they never name a medicine, condition or test. They point the patient
-   back to the app or to Tomi's phone line. Nigerian SMS is one-way for the MVP, so replies are not read. */
+   back to the app or to Tomi's phone line. Replies are not read. SMS is off until there is a provider (MESSAGE_CHANNELS). */
 const MESSAGE_TEMPLATES = {
   medicine: { title: 'Medicine reminder', body: (first) => `CareLoop: Hello ${first}, you have a reminder from ${FACILITY}. Open the CareLoop app or call Tomi on ${TOMI_LINE}. Do not reply.` },
   test: { title: 'Test reminder', body: (first) => `CareLoop: Hello ${first}, you have a reminder from ${FACILITY}. Open the CareLoop app or call Tomi on ${TOMI_LINE}. Do not reply.` },
@@ -70,6 +71,11 @@ function queueMessage(data, patient, { channel, template, scheduled_for = new Da
   return message;
 }
 
+// The channel a one-off message goes by: the first reminder channel the patient agreed to and can receive.
+const messageChannels = (patient) => MESSAGE_CHANNELS.filter((channel) => patient.channels.includes(channel) && (channel !== 'email' || patient.email));
+const messageChannel = (patient) => messageChannels(patient)[0] || null;
+const channelNoun = (channel) => (channel === 'sms' ? 'text' : 'email');
+
 function hasActive(data, patientId, match) {
   return data.notifications.some((item) => item.patient_id === patientId && ACTIVE_MESSAGE.includes(item.status) && match(item));
 }
@@ -78,7 +84,7 @@ function hasActive(data, patientId, match) {
 // due task, and one the evening before each visit, only on channels the patient agreed to.
 function scheduleReminders(data, patient) {
   if (!patient.consent_at) return;
-  const channels = ['sms', 'email'].filter((channel) => patient.channels.includes(channel) && (channel !== 'email' || patient.email));
+  const channels = messageChannels(patient);
   const now = Date.now();
   data.tasks.filter((task) => task.patient_id === patient.id && task.status === 'pending' && new Date(task.due_at).getTime() > now).forEach((task) => {
     channels.forEach((channel) => {
@@ -128,7 +134,7 @@ function seed() {
   const simpleNote = (name) => `Discharge summary: ${name}, Kestrel General Hospital.\nAmlodipine 5 mg tablet, one tablet every morning at 09:00 for 14 days.\nReview visit at Medical Outpatients.\nReturn to hospital at once for chest pain or trouble breathing.`;
 
   const patients = [
-    { id: 'p-zainab', name: 'Zainab Musa', age: 58, language: 'Hausa', literacy_level: 'basic', caregiver_mode: true, caregiver: { name: 'Hadiza Musa', relation: 'Daughter', scope: 'Reminders and help with tasks' }, phone_e164: '+2348000000101', email: null, channels: ['web', 'voice', 'sms'], contact_window: '08:00-11:00', pin_set: true, consent_at: at(-3, '09:00'), activation_status: 'active' },
+    { id: 'p-zainab', name: 'Zainab Musa', age: 58, language: 'Hausa', literacy_level: 'basic', caregiver_mode: true, caregiver: { name: 'Hadiza Musa', relation: 'Daughter', scope: 'Reminders and help with tasks' }, phone_e164: '+2348000000101', email: 'zainab.musa@kestrelmail.ng', channels: ['web', 'voice', 'email'], contact_window: '08:00-11:00', pin_set: true, consent_at: at(-3, '09:00'), activation_status: 'active' },
     { id: 'p-tola', name: 'Tola Adeyemi', age: 44, language: 'Yoruba', literacy_level: 'standard', caregiver_mode: false, caregiver: null, phone_e164: '+2348000000102', email: 'tola.adeyemi@kestrelmail.ng', channels: ['web', 'email', 'voice'], contact_window: '16:00-19:00', pin_set: true, consent_at: at(-6, '14:00'), activation_status: 'active' },
     { id: 'p-chidi', name: 'Chidi Okeke', age: 63, language: 'Igbo', literacy_level: 'standard', caregiver_mode: false, caregiver: null, phone_e164: '+2348000000103', email: null, channels: [], contact_window: null, pin_set: false, consent_at: null, activation_status: 'invited' },
     { id: 'p-grace', name: 'Grace Bassey', age: 51, language: 'English', literacy_level: 'standard', caregiver_mode: false, caregiver: null, phone_e164: '+2348000000104', email: 'grace.bassey@kestrelmail.ng', channels: [], contact_window: null, pin_set: false, consent_at: null, activation_status: 'plan_review' },
@@ -218,12 +224,12 @@ function seed() {
   const events = [
     ev('p-zainab', at(-3, '08:30'), 'agent', 'Care Plan Agent', 'system', 'plan_drafted', 'Plan drafted from discharge note. 1 dose line flagged.', 'system_recorded'),
     ev('p-zainab', at(-3, '08:45'), 'clinician', REVIEWER, 'dashboard', 'plan_approved', 'Plan corrected and approved.', 'clinician_verified'),
-    ev('p-zainab', at(-3, '09:00'), 'patient', 'Zainab Musa', 'clinic', 'consent_recorded', 'Agreed at the clinic to phone calls, text messages and chat in the app. PIN set.', 'clinician_verified'),
+    ev('p-zainab', at(-3, '09:00'), 'patient', 'Zainab Musa', 'clinic', 'consent_recorded', 'Agreed at the clinic to phone calls, email and chat in the app. PIN set.', 'clinician_verified'),
     ev('p-zainab', at(-1, '09:15'), 'system', 'Scheduler', 'voice', 'call_answered', 'Reminder call answered. Identity verified by PIN.', 'provider_status'),
     ev('p-zainab', at(-1, '09:17'), 'patient', 'Zainab Musa', 'voice', 'task_reported', 'Morning medicine reported as taken.', 'self_reported'),
     ev('p-zainab', at(-1, '09:17'), 'patient', 'Zainab Musa', 'voice', 'barrier_opened', 'Could not get the evening medicine.', 'self_reported'),
     ev('p-zainab', at(-1, '09:18'), 'agent', 'Barrier Resolution Agent', 'voice', 'barrier_option_offered', 'Possible pharmacy contact shared. Barrier not resolved.', 'system_recorded'),
-    ev('p-zainab', at(-1, '09:19'), 'provider', 'SMS provider', 'sms', 'notification_delivered', 'Text with a pharmacy contact delivered.', 'provider_status'),
+    ev('p-zainab', at(-1, '09:19'), 'provider', 'Email provider', 'email', 'notification_delivered', 'Email with a pharmacy contact delivered.', 'provider_status'),
     ev('p-zainab', at(0, '08:05'), 'provider', 'Telephony provider', 'voice', 'call_unanswered', 'Reminder call not answered. Not treated as a missed dose.', 'provider_status'),
     ev('p-zainab', at(0, '08:20'), 'patient', 'Zainab Musa', 'web', 'task_reported', 'Morning medicine reported as taken.', 'self_reported'),
     ev('p-zainab', at(0, '09:20'), 'patient', 'Zainab Musa', 'voice', 'reschedule_requested', 'Asked to move the cardiology visit because of travel cost.', 'self_reported'),
@@ -321,12 +327,12 @@ function seed() {
     return message;
   };
   const yesterdayEvening = tasks.find((task) => task.id === 't-z2');
-  sent(zainab, { channel: 'sms', template: 'medicine', task_id: 't-z2', scheduled_for: new Date(new Date(yesterdayEvening.due_at).getTime() - 30 * 60000).toISOString(), status: 'failed', failure_reason: 'Not delivered. The phone was switched off or out of network.' });
-  sent(zainab, { channel: 'sms', template: 'support', created_by: 'Barrier Resolution Agent', scheduled_for: events.find((event) => event.event_type === 'notification_delivered').reported_at });
+  sent(zainab, { channel: 'email', template: 'medicine', task_id: 't-z2', scheduled_for: new Date(new Date(yesterdayEvening.due_at).getTime() - 30 * 60000).toISOString(), status: 'failed', failure_reason: 'Not delivered. The mailbox was full. Check the address with the patient.' });
+  sent(zainab, { channel: 'email', template: 'support', created_by: 'Barrier Resolution Agent', scheduled_for: events.find((event) => event.event_type === 'notification_delivered').reported_at });
   const missed = calls.find((call) => call.id === 'c-2');
-  sent(zainab, { channel: 'sms', template: 'missed_call', created_by: 'Reminder scheduler', scheduled_for: new Date(new Date(missed.ended_at).getTime() + 2 * 60000).toISOString() });
+  sent(zainab, { channel: 'email', template: 'missed_call', created_by: 'Reminder scheduler', scheduled_for: new Date(new Date(missed.ended_at).getTime() + 2 * 60000).toISOString() });
   const morning = tasks.find((task) => task.id === 't-z1');
-  sent(zainab, { channel: 'sms', template: 'medicine', task_id: 't-z1', scheduled_for: new Date(new Date(morning.due_at).getTime() - 30 * 60000).toISOString() });
+  sent(zainab, { channel: 'email', template: 'medicine', task_id: 't-z1', scheduled_for: new Date(new Date(morning.due_at).getTime() - 30 * 60000).toISOString() });
   sent(tola, { channel: 'email', template: 'medicine', scheduled_for: events.find((event) => event.actor_id === 'Email provider').reported_at }, 2);
   patients.forEach((patient) => scheduleReminders(data, patient));
   return data;
@@ -468,7 +474,8 @@ function openBarrier(patient, type, channel) {
   barrier.status = 'option_offered';
   logEvent(patient.id, { actor_type: 'patient', actor_id: patient.name, source_channel: channel, event_type: 'barrier_opened', summary: `Reported a ${type} problem.`, verification_status: 'self_reported' });
   logEvent(patient.id, { actor_type: 'agent', actor_id: 'Barrier Resolution Agent', source_channel: channel, event_type: 'barrier_option_offered', summary: 'Possible support option shared. Barrier not resolved.', verification_status: 'system_recorded' });
-  if (patient.channels.includes('sms')) queueMessage(db, patient, { channel: 'sms', template: 'support', created_by: 'Barrier Resolution Agent' });
+  const supportChannel = messageChannel(patient);
+  if (supportChannel) queueMessage(db, patient, { channel: supportChannel, template: 'support', created_by: 'Barrier Resolution Agent' });
   return barrier;
 }
 
@@ -781,7 +788,7 @@ const NUMBER_WORDS = { a: 1, an: 1, one: 1, two: 2, three: 3, four: 4, five: 5, 
 const TEST_WORDS = /\b(test|lab|labs|blood|scan|x-?ray|ecg|urine|swab)\b/;
 const MEDICINE_WORDS = /\b\d+(?:\.\d+)?\s?(mg|mcg|ml|g|units?)\b|\b(tablets?|capsules?|syrup|injection|dose|medicine|medication|take|takes)\b/;
 const VISIT_WORDS = /\b(book|appointment|visit|review|follow-?up|clinic|wound check|dressing|check-?up)\b/;
-const TEXT_WORDS = /\b(text|sms|send (?:her|him|them)?\s*a message|message (?:her|him|them))\b/;
+const TEXT_WORDS = /\b(text|sms|e-?mail|send (?:her|him|them)?\s*a message|message (?:her|him|them))\b/;
 const CALL_WORDS = /\b(call|ring|phone)\b/;
 const ASSISTANT_TEMPLATES = ['medicine', 'visit', 'call_clinic'];
 
@@ -853,7 +860,7 @@ function mentionedPatient(text) {
 
 function splitInstruction(text) {
   return text
-    .split(/(?<=[.!?;])\s+|\n+|\s+(?:and\s+)?also\s+|\s+(?:and\s+)?then\s+|\s+and\s+(?=(?:text|sms|send|message|call|ring|phone|book|schedule|add|remind|note|tell)\b)/i)
+    .split(/(?<=[.!?;])\s+|\n+|\s+(?:and\s+)?also\s+|\s+(?:and\s+)?then\s+|\s+and\s+(?=(?:text|sms|e-?mail|send|message|call|ring|phone|book|schedule|add|remind|note|tell)\b)/i)
     .map((part) => part.trim().replace(/[.;]+$/, ''))
     .filter((part) => part.length > 2);
 }
@@ -867,7 +874,7 @@ function draftAction(clause, patient) {
   }
   if (TEXT_WORDS.test(lower)) {
     const template = /\b(visit|appointment|clinic day)\b/.test(lower) ? 'visit' : MEDICINE_WORDS.test(lower) ? 'medicine' : 'call_clinic';
-    if (!patient.channels.includes('sms')) return { id, kind: 'send_text', template, blocked: true, issues: [`${first} has not agreed to text messages, so this cannot be sent.`] };
+    if (!messageChannel(patient)) return { id, kind: 'send_text', template, blocked: true, issues: [`${first} has not agreed to email reminders, so this cannot be sent.`] };
     return { id, kind: 'send_text', template, issues: [] };
   }
   if (CALL_WORDS.test(lower) && !/\bcall (us|the clinic|the ward)\b/.test(lower)) {
@@ -970,12 +977,13 @@ function applyAction(patient, action, by) {
     return `${appointment.what} booked.`;
   }
   if (action.kind === 'send_text') {
-    if (!patient.channels.includes('sms')) throw new Error(`${first} has not agreed to text messages.`);
-    if (!ASSISTANT_TEMPLATES.includes(action.template)) throw new Error('Choose which text to send.');
-    const message = queueMessage(db, patient, { channel: 'sms', template: action.template, created_by: by });
-    logEvent(patient.id, { actor_type: 'clinician', actor_id: by, source_channel: 'dashboard', event_type: 'notification_requested', summary: `Sent a "${message.title}" text.`, verification_status: 'clinician_verified' });
+    const channel = messageChannel(patient);
+    if (!channel) throw new Error(`${first} has not agreed to email reminders.`);
+    if (!ASSISTANT_TEMPLATES.includes(action.template)) throw new Error('Choose which message to send.');
+    const message = queueMessage(db, patient, { channel, template: action.template, created_by: by });
+    logEvent(patient.id, { actor_type: 'clinician', actor_id: by, source_channel: 'dashboard', event_type: 'notification_requested', summary: `Sent a "${message.title}" ${channelNoun(channel)}.`, verification_status: 'clinician_verified' });
     advanceMessages();
-    return `"${message.title}" text sent to ${first}.`;
+    return `"${message.title}" ${channelNoun(channel)} sent to ${first}.`;
   }
   if (action.kind === 'call_patient') {
     if (!patient.channels.includes('voice')) throw new Error(`${first} has not agreed to phone calls.`);
@@ -1038,6 +1046,7 @@ export const mock = {
   async recordConsent(id, consent) {
     const patient = findPatient(id);
     patient.channels = consent.channels;
+    if (consent.email) patient.email = consent.email;
     patient.contact_window = consent.contact_window || patient.contact_window;
     patient.pin_set = Boolean(consent.pin) || patient.pin_set;
     patient.consent_at = nowIso();
@@ -1152,7 +1161,7 @@ export const mock = {
       request.status = 'approved';
       const patient = findPatient(request.patient_id);
       cancelMessages(patient.id, (item) => item.appointment_id === appointment.id, 'Not sent. The visit was moved.');
-      ['sms', 'email'].filter((channel) => patient.channels.includes(channel)).forEach((channel) => queueMessage(db, patient, { channel, template: 'visit_moved', appointment_id: replacement.id, created_by: REVIEWER }));
+      messageChannels(patient).forEach((channel) => queueMessage(db, patient, { channel, template: 'visit_moved', appointment_id: replacement.id, created_by: REVIEWER }));
       scheduleReminders(db, patient);
       logEvent(request.patient_id, { actor_type: 'clinician', actor_id: REVIEWER, source_channel: 'dashboard', event_type: 'appointment_rescheduled', summary: `Visit moved from ${new Date(oldTime).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })} to ${new Date(slot.starts_at).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}. Old reminder cancelled, new reminder scheduled.`, verification_status: 'clinician_verified' });
     } else {

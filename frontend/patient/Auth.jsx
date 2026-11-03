@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
-import { ArrowLeft, MessageSquareText, PhoneCall } from 'lucide-react';
+import { ArrowLeft, Mail, PhoneCall } from 'lucide-react';
 import { CareLoopAPI } from '../shared/api.js';
 import { CodeInput, IncomingMessage, PhoneField, PinPad, PresenterNote, clock, useCountdown } from '../shared/auth-ui.jsx';
 import { LANGUAGES } from '../shared/languages.js';
+
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 import { BetaChip, ErrorNote, LoadingBlock, useAsync } from '../shared/ui.jsx';
 import { LogoMark, LoopArt, SafetyFooter } from './parts.jsx';
 
@@ -70,7 +72,7 @@ export function WelcomeScreen({ go, notice }) {
 
 export function PhoneSignIn({ go, purpose, onChallenge }) {
   const [phone, setPhone] = useState('');
-  const [via, setVia] = useState('sms');
+  const [via, setVia] = useState('email');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const reset = purpose === 'reset';
@@ -88,7 +90,7 @@ export function PhoneSignIn({ go, purpose, onChallenge }) {
   return (
     <AuthShell
       title={reset ? 'Make a new PIN' : 'Sign in'}
-      lede={reset ? 'First, we need to check it is you. Enter the phone number you gave your care team.' : 'Enter the phone number you gave your care team. We will send you a 6-digit code.'}
+      lede={reset ? 'First, we need to check it is you. Enter the phone number you gave your care team.' : 'Enter the phone number you gave your care team. We will send a 6-digit code to the email address on your account.'}
       back={{ href: reset ? '#/unlock' : '#/welcome', label: 'Back' }}
       art={false}
     >
@@ -97,9 +99,9 @@ export function PhoneSignIn({ go, purpose, onChallenge }) {
         <fieldset className="via-picker">
           <legend className="label">How should we send the code?</legend>
           <label className="via-option">
-            <input type="radio" name="via" checked={via === 'sms'} onChange={() => setVia('sms')} />
-            <MessageSquareText aria-hidden="true" size={22} />
-            <span><strong>Text message</strong><small>A short SMS with the code</small></span>
+            <input type="radio" name="via" checked={via === 'email'} onChange={() => setVia('email')} />
+            <Mail aria-hidden="true" size={22} />
+            <span><strong>Email</strong><small>To the email address on your account</small></span>
           </label>
           <label className="via-option">
             <input type="radio" name="via" checked={via === 'voice'} onChange={() => setVia('voice')} />
@@ -110,7 +112,7 @@ export function PhoneSignIn({ go, purpose, onChallenge }) {
         {error && <p id="phone-error" className="field-error" role="alert">{error}</p>}
         <button type="submit" className="btn btn-primary btn-lg btn-block" disabled={busy || phone.replace(/\D/g, '').length < 10}>{busy ? 'Sending…' : 'Send my code'}</button>
       </form>
-      <PresenterNote items={[['Zainab (patient)', '0800 000 0101'], ['Tola (patient)', '0800 000 0102'], ['Hadiza (helps Zainab)', '0800 000 0201'], ['The code', 'Arrives as a text at the top of the screen']]} />
+      <PresenterNote items={[['Zainab (patient)', '0800 000 0101'], ['Tola (patient)', '0800 000 0102'], ['Hadiza (helps Zainab)', '0800 000 0201'], ['The code', 'Arrives as an email at the top of the screen']]} />
     </AuthShell>
   );
 }
@@ -149,7 +151,7 @@ export function VerifyScreen({ go, challenge, onChallenge, onSignedIn }) {
   return (
     <AuthShell
       title="Enter your code"
-      lede={byCall ? `Tomi is calling ${challenge.masked_phone} to read out a 6-digit code.` : `We sent a 6-digit code by text message to ${challenge.masked_phone}.`}
+      lede={byCall ? `Tomi is calling ${challenge.masked_phone} to read out a 6-digit code.` : challenge.masked_email ? `We sent a 6-digit code by email to ${challenge.masked_email}.` : `If ${challenge.masked_phone} has a CareLoop account with an email address, we sent a 6-digit code there.`}
       back={{ href: challenge.invite_code ? `#/invite/${challenge.invite_code}` : challenge.purpose === 'reset' ? '#/forgot-pin' : '#/sign-in', label: 'Change number' }}
       art={false}
     >
@@ -164,10 +166,11 @@ export function VerifyScreen({ go, challenge, onChallenge, onSignedIn }) {
         <p className="label">No code yet?</p>
         {resendIn > 0 ? <p className="hint">You can ask for another in {clock(resendIn)}.</p> : (
           <div className="resend-actions">
-            <button type="button" className="btn btn-secondary" onClick={() => resend('sms')}><MessageSquareText aria-hidden="true" size={18} />Text me again</button>
+            <button type="button" className="btn btn-secondary" onClick={() => resend('email')}><Mail aria-hidden="true" size={18} />Email me again</button>
             <button type="button" className="btn btn-secondary" onClick={() => resend('voice')}><PhoneCall aria-hidden="true" size={18} />Call me instead</button>
           </div>
         )}
+        {!byCall && !challenge.masked_email && <p className="hint">No email address on your account? Choose a phone call, or ask your care team to add one.</p>}
       </div>
       <IncomingMessage message={challenge.demo_message} />
     </AuthShell>
@@ -219,7 +222,7 @@ export function InviteScreen({ go, code, onChallenge, signedInAs, onSignOut }) {
 function InviteCodeEntry({ go }) {
   const [value, setValue] = useState('');
   return (
-    <AuthShell title="Enter your invite code" lede="It came by text message from your care team or from a family member. It looks like this: CL-7K4Q." back={{ href: '#/welcome', label: 'Back' }} art={false}>
+    <AuthShell title="Enter your invite code" lede="Your care team or a family member gave it to you, by email or in person. It looks like this: CL-7K4Q." back={{ href: '#/welcome', label: 'Back' }} art={false}>
       <form className="auth-form" onSubmit={(event) => { event.preventDefault(); go(`invite/${value.trim().toUpperCase()}`); }}>
         <div className="field">
           <label htmlFor="invite-code">Invite code</label>
@@ -235,6 +238,7 @@ function InviteCodeEntry({ go }) {
 function InviteDetails({ go, code, onChallenge, signedInAs, onSignOut }) {
   const query = useAsync(() => CareLoopAPI.getInvite(code), [code]);
   const [phone, setPhone] = useState('');
+  const [email, setEmail] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const invite = query.data?.invite;
@@ -243,7 +247,7 @@ function InviteDetails({ go, code, onChallenge, signedInAs, onSignOut }) {
     setBusy(true);
     setError(null);
     try {
-      const response = await CareLoopAPI.startInviteSignIn(code, { via, phone });
+      const response = await CareLoopAPI.startInviteSignIn(code, { via, phone, email: via === 'email' ? email.trim() : undefined });
       onChallenge({ ...response, purpose: 'invite', invite_code: code });
     } catch (requestError) { setError(requestError.message); setBusy(false); }
   };
@@ -283,15 +287,20 @@ function InviteDetails({ go, code, onChallenge, signedInAs, onSignOut }) {
       {forHelper ? (
         <PhoneField id="helper-phone" label="Your own phone number" value={phone} onChange={setPhone} invalid={Boolean(error)} describedBy={error ? 'invite-error' : undefined} />
       ) : (
-        <p>To check it is you, we will send a code to the number your care team has for you: <strong>{invite.masked_phone}</strong>.</p>
+        <p>To check it is you, we will email you a code, or Tomi can call the number your care team has for you: <strong>{invite.masked_phone}</strong>.</p>
       )}
+      <div className="field">
+        <label htmlFor="invite-email">Your email address</label>
+        <input id="invite-email" className="input input-lg" type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} aria-describedby="invite-email-hint" />
+        <p id="invite-email-hint" className="hint">We send your sign-in codes and reminders here. They never say what your medicine is for.</p>
+      </div>
       {error && <p id="invite-error" className="field-error" role="alert">{error}</p>}
       <div className="auth-actions">
-        <button type="button" className="btn btn-primary btn-lg btn-block" disabled={busy || (forHelper && phone.replace(/\D/g, '').length < 10)} onClick={() => send('sms')}><MessageSquareText aria-hidden="true" size={20} />Text me a code</button>
+        <button type="button" className="btn btn-primary btn-lg btn-block" disabled={busy || !EMAIL_PATTERN.test(email.trim()) || (forHelper && phone.replace(/\D/g, '').length < 10)} onClick={() => send('email')}><Mail aria-hidden="true" size={20} />Email me a code</button>
         <button type="button" className="btn btn-secondary btn-lg btn-block" disabled={busy || (forHelper && phone.replace(/\D/g, '').length < 10)} onClick={() => send('voice')}><PhoneCall aria-hidden="true" size={20} />Call me with a code</button>
       </div>
       {!forHelper && <p className="hint">Not {invite.patient_first_name}? Please stop here and let your care team know.</p>}
-      {forHelper && <PresenterNote items={[['Any new number', '0800 000 0301']]} />}
+      <PresenterNote items={[...(forHelper ? [['Any new number', '0800 000 0301']] : []), ['Email', 'Any address; the code appears at the top of the screen']]} />
     </AuthShell>
   );
 }

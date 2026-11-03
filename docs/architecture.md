@@ -31,11 +31,11 @@ These change the product described in the v2.1 document. The document owner shou
    facility's CareLoop admin gives out. Invite links still work.
 3. **Several care facilities, not only hospitals, not only in Nigeria.** Each staff account belongs to one facility and
    sees only that facility's patients.
-4. **SMS and email reminders.** Generic templates only, 30 minutes before each task and at 18:00 the evening before a
+4. **Email reminders (SMS later).** Generic templates only, 30 minutes before each task and at 18:00 the evening before a
    visit, never between 21:00 and 07:00. Each channel needs the patient's consent and can be turned off by the patient.
 5. **Clinician Assistant Agent (new).** The dashboard assistant turns a clinician's typed or spoken instruction into
    proposed changes: medicine or test reminders, visits, a generic text, a Tomi call, or a note. The clinician confirms
    before anything is saved, and each change is logged as clinician-verified. The agent never adds clinical detail the
    clinician did not give.
-6. **Patient sign-in.** Phone number from any country (country picker, Nigeria first) with a 6-digit code (SMS or voice call), then a 4-digit PIN on a remembered phone.
+6. **Patient sign-in.** Phone number from any country (country picker, Nigeria first) with a 6-digit code (by email or voice call; SMS once there is a provider), then a 4-digit PIN on a remembered phone.
    The same PIN is used on Tomi phone calls. Family helpers join with an invite code from the patient.

@@ -43,7 +43,7 @@ Add `?presenter=1` to any URL to show sign-in details on each screen and tools t
 
 Facility codes are for staff only. Patients and family helpers never use them; they join through their care team or the patient.
 
-- Existing patient: phone `0800 000 0101` (Zainab Musa). The sign-in code arrives as a text at the top of the screen.
+- Existing patient: phone `0800 000 0101` (Zainab Musa). The sign-in code arrives as an email at the top of the screen.
   On the next visit the phone remembers her, and the PIN is `1234`.
 - New patient, invited by their care team: invite code `CL-7K4Q` (Chidi Okeke). Signs in, chooses a PIN, then agrees
   to how Tomi may contact him.
@@ -53,7 +53,7 @@ Facility codes are for staff only. Patients and family helpers never use them; t
 ## Five-minute walkthrough
 
 1. **Dashboard overview.** Sign in as Dr. Ada Okafor. "Needs you now" lists the open escalation (red), overdue
-   medicines, plans to review, a reschedule request and a text that was not delivered.
+   medicines, plans to review, a reschedule request and an email that was not delivered.
 2. **Approve a plan.** Patients, then Ibrahim Danjuma, then **Review plan**. Tomi drafted it from the discharge note; two
    fields need a decision. Nothing reaches the patient until it is approved.
 3. **Use the assistant.** Open Grace Bassey and choose **Ask the assistant**. Type or say: "Book a diabetes review next

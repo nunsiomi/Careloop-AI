@@ -131,12 +131,14 @@ While `brief_ready` is false, the UI polls every 3 s and shows "Escalation Summa
 
 Patient responses also carry `"failed_messages": 0` and `"next_message": { "channel": "sms", "scheduled_for": "ISO", "title": "Medicine reminder" } or null` *(added)*.
 
-## SMS and email reminders *(doc v2, section 8; routes added)*
+## Email (and later SMS) reminders *(doc v2, section 8; routes added)*
+
+Email is the live channel until CareLoop has an SMS provider (Nunsi, 3 Nov 2026). `sms` stays in every shape so it can return without changes; the backend only uses it once `adapters/sms.py` is set up, and the app hides it while `SMS_AVAILABLE` is false. Backend rules and templates: `backend/app/services/notifications.py`.
 
 Rules the backend scheduler follows, and the UI assumes:
 - Only on channels the patient agreed to (`patient.channels`). Re-check consent at send time; if it was withdrawn, cancel instead of sending.
 - One message 30 minutes before each pending task and one at 18:00 the evening before each visit. Nothing between 21:00 and 07:00; move it to 07:00.
-- Bodies are fixed templates that never name a medicine, condition or test. Nigerian SMS is one-way for the MVP, so every text ends "Do not reply."
+- Bodies are fixed templates that never name a medicine, condition or test. Replies are not read, so every message ends "Do not reply." Emails add a link to the app.
 - Cancel a scheduled reminder when the patient reports the task done, when a visit is moved (then send `visit_moved`), or when the channel is turned off.
 - A delivered text is not proof the patient did anything. Delivery status comes from the provider webhook.
 
@@ -164,7 +166,9 @@ Error rules: sign-in and reset responses must not reveal whether an account exis
 
 ### Patients and family helpers
 
-- Codes are 6 digits, valid 300 s, resend after 60 s, 5 wrong tries per code. Delivery `via` is `sms` or `voice` (Tomi reads the code out).
+- Codes are 6 digits, valid 300 s, resend after 60 s, 5 wrong tries per code. Delivery `via` is `email` (the default while there is no SMS provider), `voice` (Tomi reads the code out) or, later, `sms`.
+- Phone sign-in sends the code to the email address on the account and never shows that address (`masked_email` is null), so the screen cannot reveal whether a number has an account. With no email on file nothing is sent; the person can choose a call instead.
+- Invites ask for the person's own `email`; it is saved to the patient or caregiver once the code is verified, and `masked_email` echoes it back.
 - The PIN is 4 digits. It is the same PIN Tomi asks for on phone calls. 5 wrong PINs locks PIN sign-in until a code is used.
 - The app locks after `idle_lock_minutes` (10) without activity.
 - Phone numbers can be from any country. The app sends `phone` as `+<country code> <number as typed>` (for example `+234 0803 123 4567` or `+44 7400 123456`); a number typed without `+` is read as Nigerian. The backend normalises to E.164 and drops a leading trunk `0` after the country code.
@@ -173,7 +177,7 @@ Error rules: sign-in and reset responses must not reveal whether an account exis
 PatientSession: { "id": "ps_...", "kind": "patient | caregiver", "patient_id": "p-zainab", "user_name": "Hadiza Musa",
   "acting_for_name": "Zainab Musa or null", "relation": "Daughter or null", "phone_e164": "+234...", "pin_set": true,
   "consent_needed": false, "idle_lock_minutes": 10, "expires_at": "ISO" }
-Challenge: { "challenge_id": "ch_...", "masked_phone": "+234 ••• ••• 0101", "via": "sms", "expires_in": 300, "resend_in": 60 }
+Challenge: { "challenge_id": "ch_...", "masked_phone": "+234 ••• ••• 0101", "masked_email": "t••••@example.com or null", "via": "email | voice | sms", "expires_in": 300, "resend_in": 60 }
 Invite: { "code": "CL-7K4Q", "kind": "patient | caregiver", "facility": "string", "invited_by": "string",
   "patient_first_name": "Chidi", "caregiver_name": "string or null", "relation": "string or null", "masked_phone": "string or null" }
 Caregiver: { "id": "cg-1", "patient_id": "p-zainab", "name": "Hadiza Musa", "relation": "Daughter", "masked_phone": "string", "scope": "string", "added_at": "ISO" }
@@ -182,8 +186,8 @@ Caregiver: { "id": "cg-1", "patient_id": "p-zainab", "name": "Hadiza Musa", "rel
 | `CareLoopAPI` method | HTTP | Request body | Response |
 |---|---|---|---|
 | `getPatientSession()` | `GET /auth/patient/session` | | `{ session: PatientSession or null }` |
-| `startPhoneSignIn(body)` | `POST /auth/patient/otp` | `{ phone, via }` | `Challenge` (same answer for unknown numbers) |
-| `startInviteSignIn(code, body)` | `POST /auth/invites/{code}/otp` | `{ via, phone? }` (phone only for caregiver invites) | `Challenge` |
+| `startPhoneSignIn(body)` | `POST /auth/patient/otp` | `{ phone, via }` (`via` defaults to `email`) | `Challenge` (same answer for unknown numbers) |
+| `startInviteSignIn(code, body)` | `POST /auth/invites/{code}/otp` | `{ via, email?, phone? }` (email when `via` is `email`; phone only for caregiver invites) | `Challenge` |
 | `resendCode(id, body)` | `POST /auth/patient/otp/{id}/resend` | `{ via }` | `Challenge`; 429 before `resend_in` |
 | `verifyCode({ challenge_id, code })` | `POST /auth/patient/otp/{id}/verify` | `{ code }` | `{ session }`; 401 wrong, 410 expired, 404 number not linked |
 | `signInWithPin(body)` | `POST /auth/patient/pin-sign-in` | `{ phone_e164, pin }` | `{ session }`; 401 with `locked` |

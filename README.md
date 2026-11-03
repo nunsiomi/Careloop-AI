@@ -45,10 +45,10 @@ item, tick it there in the same commit as the work.
   changes: medicine or test reminders, visits, a text, a Tomi call, or a note. Nothing is saved until the clinician
   confirms. It never adds a medicine, dose, time or place the clinician didn't say, and it blocks texts or calls the
   patient hasn't agreed to.
-- **Reminders.** Generic SMS and email templates that never name a medicine, condition or test. They go out 30 minutes
+- **Reminders.** Generic email templates (SMS later, once there is a provider) that never name a medicine, condition or test. They go out 30 minutes
   before each task and at 18:00 the evening before a visit, never between 21:00 and 07:00. Patients can turn each
   channel off.
-- **Patient sign-in.** Phone number from any country and a 6-digit code (by SMS or voice call), then a 4-digit PIN on
+- **Patient sign-in.** Phone number from any country and a 6-digit code (by email or voice call; SMS later), then a 4-digit PIN on
   a remembered phone.
   Family helpers join with an invite code from the patient.
 - **Frontend stack.** React + Vite, with a team preview on Vercel.

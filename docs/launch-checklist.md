@@ -17,7 +17,7 @@ Last updated: 3 Nov 2026
 | 3. Agents | 2 / 9 |
 | 4. Safety | 0 / 5 |
 | 5. Tomi voice | 0 / 6 |
-| 6. Frontend | 4 / 12 |
+| 6. Frontend | 5 / 13 |
 | 7. Deploy | 1 / 7 |
 | 8. Clinical and team sign-off | 1 / 6 |
 
@@ -25,7 +25,8 @@ Update this table when you tick items off.
 
 ## 1. Accounts and keys
 
-Apply for the SMS sender ID and the voice number first; they can take days or weeks.
+Set up email sending first: since 3 Nov 2026 email carries reminders and patient sign-in codes, and SMS waits
+until there is a provider (Termii needs a CAC registration). Apply for the voice number early; it can take weeks.
 
 - [ ] **Groq API key** (console.groq.com) → `GROQ_API_KEY`. Pick the model for the agents and set `GROQ_MODEL`.
   Check the free-tier rate limits before the judges' demo; upgrade if several people will test at once. — Nunsi
@@ -35,9 +36,11 @@ Apply for the SMS sender ID and the voice number first; they can take days or we
 - [ ] **Phone number for Tomi calls**: Africa's Talking (`AT_USERNAME`, `AT_API_KEY`) or Twilio (`TWILIO_*`).
   Twilio trial accounts can only call numbers you have verified. — Olamide
 - [ ] **LiveKit SIP trunk** linked to that phone number → `LIVEKIT_SIP_TRUNK_ID`. — Nunsi
-- [ ] **SMS provider** (Africa's Talking or Termii) → `SMS_PROVIDER`, `SMS_API_KEY`. — Olamide
-- [ ] **SMS sender ID registered** (`SMS_SENDER_ID`), on the transactional route so codes reach DND numbers. — Olamide
-- [ ] **Email sending**: a Gmail app password or Brevo (`SMTP_*`), or Resend once there is a domain → `EMAIL_FROM`. — Olamide
+- [ ] **Email sending** (needed now): a Gmail app password (`smtp.gmail.com`) or Brevo (`smtp-relay.brevo.com`) →
+  `SMTP_HOST`, `SMTP_USER`, `SMTP_PASSWORD`, `EMAIL_FROM`; Resend once there is a domain. Then send one real reminder
+  and one sign-in code to a team inbox. — Olamide
+- [ ] **SMS provider** (later; Africa's Talking or Termii) → `SMS_PROVIDER`, `SMS_API_KEY`. — Olamide
+- [ ] **SMS sender ID registered** (later; `SMS_SENDER_ID`), on the transactional route so codes reach DND numbers. — Olamide
 - [ ] **Hosted Postgres** (Neon or Supabase) → `DATABASE_URL` for the deployed backend. — Olamide
 - [ ] **Backend hosting** (Render, Railway or Fly.io) for FastAPI, the reminder scheduler and the voice worker. — Olamide
 - [ ] **Generated secrets** `SESSION_SECRET`, `CODE_PEPPER`, `WEBHOOK_SECRET`, stored in the host's settings, never in Git. — Olamide
@@ -56,7 +59,8 @@ The contract is `docs/api_shapes.md`. Each route should return exactly what the 
 - [ ] Plan flow in the orchestrator: on `POST /patients`, run the Care Plan Agent then the Plan Verifier, store the
   verifier's `issues` as `verifier_issues`, and never send a plan while `deliverable` is false or before a
   clinician approves (`docs/api_shapes.md`, "Plan"). — Olamide
-- [ ] Patient sign-in: code by SMS or voice call, PIN on a remembered phone, invite codes, caregivers. — Olamide
+- [ ] Patient sign-in: code by email (to the address on the account, never shown) or voice call, PIN on a remembered
+  phone, invite codes that collect the person's email, caregivers. SMS codes later. — Olamide
 - [ ] Staff sign-in: password, 6-digit email code, password reset, idle lock. — Olamide
 - [ ] Staff sign-up with hospital join code (lockout after 5 wrong codes), invite links. Never return `demo_join_code`. — Olamide
 - [ ] Sessions in httpOnly cookies, rate limits on every code and PIN route. — Olamide
@@ -64,7 +68,11 @@ The contract is `docs/api_shapes.md`. Each route should return exactly what the 
 - [ ] Dashboard routes: overview, patients, profile, plan review, appointments, reminders, escalations. — Olamide
 - [ ] Reminder scheduler: 30 minutes before each task, 18:00 before a visit, nothing 21:00–07:00,
   consent checked at send time, retries. — Olamide
+  Rules written 3 Nov 2026 (`services/notifications.py`: `plan_reminders`, `dispatch`, `send_sign_in_code`, with
+  tests); still to do: the APScheduler job that stores reminders and runs `dispatch` when they are due.
 - [ ] Provider adapters for SMS, email and calls, with signed delivery-report webhooks. — Olamide
+  Email adapter written 3 Nov 2026 (`adapters/email.py`, SMTP or console); SMS stays off (`adapters/sms.py`) until
+  there is a provider. Calls and webhooks still to do.
 - [ ] Each staff account sees only its own hospital's patients (checked on every route). — Olamide
 - [ ] Tests: the acceptance tests in section 17 of the project documentation. — All
   Care plan integrity done 3 Nov 2026 (`backend/tests/test_plan_verifier.py`, `test_care_plan.py`); the other
@@ -118,8 +126,10 @@ All agents call Groq through one shared client, so the model can be changed in o
 - [x] Clinician Assistant panel with typing and voice. — Nunsi, 1 Nov 2026
 - [x] Any care facility, not only hospitals: facility type on sign-up (hospital, pharmacy, clinic, care home),
   sample facilities in Ghana and Kenya, phone numbers from any country. — Nunsi, 2 Nov 2026
+- [x] Email first: SMS switched off in the app (`SMS_AVAILABLE` in `shared/languages.js`), sign-in codes and
+  invites by email, onboarding asks for an email address, dashboard "Send a message" uses email. — Nunsi, 3 Nov 2026
 - [ ] Bedside welcome text on onboarding. Decide first: language of the text, and what happens if the patient
-  hasn't signed in after 24 hours. — Nunsi
+  hasn't signed in after 24 hours. With SMS off, this becomes a welcome email or a printed invite code. — Nunsi
 - [ ] Assign patients to clinicians. — Nunsi
 - [ ] Hospital admin page: change the join code, remove staff, see new sign-ups (needs Nunsi's OK for a new page). — Nunsi
 - [ ] Privacy notice and terms pages (NDPA 2023). — Nunsi
