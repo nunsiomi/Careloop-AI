@@ -2,12 +2,14 @@ import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Delete, Phone, PhoneOff } from 'lucide-react';
 import { CareLoopAPI } from '../shared/api.js';
+import { connectLiveVoice } from '../shared/live-voice.js';
 import { languageInfo } from '../shared/languages.js';
 import { useDialogFocus } from '../shared/ui.jsx';
 import { PRESENTER } from '../shared/presenter.js';
 
-// Browser voice (doc v2, flow D). With mocks, a scripted session stands in for LiveKit + Spitch:
-// the patient picks what to say from quick phrases, and every Tomi line comes from the API.
+// Browser voice (doc v2, flow D). A "livekit" session talks to the real Tomi worker (voice/tomi_agent.py)
+// through LiveKit: the patient just speaks, and captions come from the worker. A "mock" session is the scripted
+// stand-in: the patient picks what to say from quick phrases, and every Tomi line comes from the API.
 const STATE_LABEL = {
   connecting: 'Connecting to Tomi…',
   speaking: 'Tomi is speaking',
@@ -31,13 +33,44 @@ export default function VoiceSheet({ patient, support, onClose }) {
   const [phrases, setPhrases] = useState([]);
   const [escalation, setEscalation] = useState(null);
   const [error, setError] = useState(null);
+  const [needsTap, setNeedsTap] = useState(false);
   const timer = useRef(null);
+  const live = useRef(null);
   const language = languageInfo(patient.language);
 
   const finish = () => {
     window.clearTimeout(timer.current);
-    if (session?.id) CareLoopAPI.endVoiceSession(session.id).catch(() => {});
+    live.current?.disconnect();
+    if (session?.id && session.mode === 'mock') CareLoopAPI.endVoiceSession(session.id).catch(() => {});
     onClose();
+  };
+
+  const showCaption = ({ key, speaker, transcript }) => {
+    setTurns((current) => {
+      const index = current.findIndex((turn) => turn.key === key);
+      if (index === -1) return current.concat({ key, speaker, transcript, confidence: null });
+      const next = current.slice();
+      next[index] = { ...next[index], transcript };
+      return next;
+    });
+  };
+
+  const startLive = async (created) => {
+    setSession(created);
+    try {
+      live.current = await connectLiveVoice(created, {
+        phase: setPhase,
+        caption: showCaption,
+        escalation: () => setEscalation({ call_number: support.emergency_number }),
+        needsTap: setNeedsTap,
+        ended: () => setPhase('ended')
+      });
+    } catch (connectError) {
+      setError(connectError?.name === 'NotAllowedError'
+        ? 'Tomi needs your microphone. Allow it in your browser settings, or type instead.'
+        : 'Could not connect to Tomi. Check your connection, or type instead.');
+      setPhase('unavailable');
+    }
   };
   useDialogFocus(sheetRef, finish, '.voice-end');
 
@@ -62,9 +95,12 @@ export default function VoiceSheet({ patient, support, onClose }) {
     started.current = true;
     (async () => {
       try {
-        const [created, demo] = await Promise.all([CareLoopAPI.createVoiceSession({ patient_id: patient.id }), CareLoopAPI.getVoiceDemoPhrases().catch(() => ({ phrases: [] }))]);
+        const [created, demo] = await Promise.all([CareLoopAPI.createVoiceSession({ patient_id: patient.id, language: patient.language }), CareLoopAPI.getVoiceDemoPhrases().catch(() => ({ phrases: [] }))]);
+        if (created.session.mode === 'livekit') {
+          await startLive(created.session);
+          return;
+        }
         if (created.session.mode !== 'mock') {
-          // TODO(Nunsi): connect livekit-client with created.session.url and created.session.token once the Tomi worker is live.
           setPhase('unavailable');
           return;
         }
@@ -76,7 +112,10 @@ export default function VoiceSheet({ patient, support, onClose }) {
         setPhase('unavailable');
       }
     })();
-    return () => window.clearTimeout(timer.current);
+    return () => {
+      window.clearTimeout(timer.current);
+      live.current?.disconnect();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -122,6 +161,14 @@ export default function VoiceSheet({ patient, support, onClose }) {
       {escalation && (
         <div className="voice-urgent" role="alert">
           <a className="btn btn-lg urgent-call" href={`tel:${escalation.call_number}`}><Phone aria-hidden="true" size={20} />Call {escalation.call_number}</a>
+        </div>
+      )}
+
+      {session?.mode === 'livekit' && !['ended', 'unavailable'].includes(phase) && (
+        <div className="voice-panel">
+          {needsTap
+            ? <button type="button" className="btn btn-lg voice-light" onClick={() => live.current?.startAudio().then(() => setNeedsTap(false))}>Tap to hear Tomi</button>
+            : <p className="voice-hint">Just speak. Tomi can hear you, and stops when you talk.</p>}
         </div>
       )}
 

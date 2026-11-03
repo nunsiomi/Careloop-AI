@@ -2,8 +2,8 @@ fastapi
 uvicorn[standard]
 pydantic>=2
 apscheduler
-anthropic
-livekit-agents
+groq
+-r voice/requirements.txt
 httpx
 pytest
 pytest-asyncio

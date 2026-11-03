@@ -64,7 +64,7 @@ function EscalationCard({ escalation, onChange }) {
         <StatusBadge kind="escalation" status={escalation.status} />
       </header>
 
-      <p className="escalation-rule"><strong>{escalation.rule_label}</strong> <code>{escalation.rule_id}</code> <span className="muted">{escalation.severity === 'red' ? 'Red flag' : 'Amber'}, set by the hospital's safety rules</span></p>
+      <p className="escalation-rule"><strong>{escalation.rule_label}</strong> <code>{escalation.rule_id}</code> <span className="muted">{escalation.severity === 'red' ? 'Red flag' : 'Amber'}, set by your facility's safety rules</span></p>
 
       <div className="escalation-words">
         <div><h3>Patient's words</h3><p className="quote">{escalation.original_text}</p>{escalation.confidence != null && <p className={`muted ${escalation.confidence < 0.75 ? 'confidence-low' : ''}`}>Speech confidence {Math.round(escalation.confidence * 100)}%</p>}</div>

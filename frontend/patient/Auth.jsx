@@ -42,7 +42,7 @@ export function WelcomeScreen({ go, notice }) {
   const choose = (name) => { setLanguage(name); window.localStorage.setItem(LANG_KEY, name); };
 
   return (
-    <AuthShell title="Your care, after you leave hospital" lede="Tomi reminds you about your medicines and visits in your own language, and lets your care team know when something is wrong.">
+    <AuthShell title="Your care, once you are home" lede="Tomi reminds you about your medicines and visits in your own language, and lets your care team know when something is wrong.">
       <Notice text={notice} />
       <fieldset className="lang-picker">
         <legend className="label">Which language should Tomi speak?</legend>
@@ -88,7 +88,7 @@ export function PhoneSignIn({ go, purpose, onChallenge }) {
   return (
     <AuthShell
       title={reset ? 'Make a new PIN' : 'Sign in'}
-      lede={reset ? 'First, we need to check it is you. Enter the phone number you gave the hospital.' : 'Enter the phone number you gave the hospital. We will send you a 6-digit code.'}
+      lede={reset ? 'First, we need to check it is you. Enter the phone number you gave your care team.' : 'Enter the phone number you gave your care team. We will send you a 6-digit code.'}
       back={{ href: reset ? '#/unlock' : '#/welcome', label: 'Back' }}
       art={false}
     >
@@ -219,7 +219,7 @@ export function InviteScreen({ go, code, onChallenge, signedInAs, onSignOut }) {
 function InviteCodeEntry({ go }) {
   const [value, setValue] = useState('');
   return (
-    <AuthShell title="Enter your invite code" lede="It came by text message from the hospital or from a family member. It looks like this: CL-7K4Q." back={{ href: '#/welcome', label: 'Back' }} art={false}>
+    <AuthShell title="Enter your invite code" lede="It came by text message from your care team or from a family member. It looks like this: CL-7K4Q." back={{ href: '#/welcome', label: 'Back' }} art={false}>
       <form className="auth-form" onSubmit={(event) => { event.preventDefault(); go(`invite/${value.trim().toUpperCase()}`); }}>
         <div className="field">
           <label htmlFor="invite-code">Invite code</label>
@@ -262,7 +262,7 @@ function InviteDetails({ go, code, onChallenge, signedInAs, onSignOut }) {
   const title = forHelper ? `Help ${invite.patient_first_name} with their care` : `Welcome, ${invite.patient_first_name}`;
   const lede = forHelper
     ? `${invite.invited_by} has asked you to help. You will see ${invite.patient_first_name}'s plan, medicines and visits, and you can tell Tomi how things are going. ${invite.patient_first_name} can remove you at any time.`
-    : `${invite.facility} has set up CareLoop for you. Tomi will help you follow the plan your doctors wrote when you left hospital.`;
+    : `${invite.facility} has set up CareLoop for you. Tomi will help you follow the plan your care team gave you.`;
 
   if (signedInAs) {
     return (
@@ -283,14 +283,14 @@ function InviteDetails({ go, code, onChallenge, signedInAs, onSignOut }) {
       {forHelper ? (
         <PhoneField id="helper-phone" label="Your own phone number" value={phone} onChange={setPhone} invalid={Boolean(error)} describedBy={error ? 'invite-error' : undefined} />
       ) : (
-        <p>To check it is you, we will send a code to the number the hospital has for you: <strong>{invite.masked_phone}</strong>.</p>
+        <p>To check it is you, we will send a code to the number your care team has for you: <strong>{invite.masked_phone}</strong>.</p>
       )}
       {error && <p id="invite-error" className="field-error" role="alert">{error}</p>}
       <div className="auth-actions">
         <button type="button" className="btn btn-primary btn-lg btn-block" disabled={busy || (forHelper && phone.replace(/\D/g, '').length < 10)} onClick={() => send('sms')}><MessageSquareText aria-hidden="true" size={20} />Text me a code</button>
         <button type="button" className="btn btn-secondary btn-lg btn-block" disabled={busy || (forHelper && phone.replace(/\D/g, '').length < 10)} onClick={() => send('voice')}><PhoneCall aria-hidden="true" size={20} />Call me with a code</button>
       </div>
-      {!forHelper && <p className="hint">Not {invite.patient_first_name}? Please stop here and let the hospital know.</p>}
+      {!forHelper && <p className="hint">Not {invite.patient_first_name}? Please stop here and let your care team know.</p>}
       {forHelper && <PresenterNote items={[['Any new number', '0800 000 0301']]} />}
     </AuthShell>
   );
@@ -331,7 +331,7 @@ export function SetPinScreen({ session, onDone }) {
         ? <PinPad key="first" label="New PIN" value={first} onChange={(value) => { setFirst(value); setError(null); }} onComplete={() => window.setTimeout(() => setStage('second'), 180)} describedBy="set-pin-error" />
         : <PinPad key="second" label="New PIN again" value={second} onChange={setSecond} onComplete={confirm} disabled={busy} describedBy="set-pin-error" />}
       <p id="set-pin-error" className="field-error" role={error ? 'alert' : undefined}>{error}</p>
-      <p className="hint">Avoid easy PINs like 1111 or your birth year. Keep it to yourself; the hospital will never ask for it.</p>
+      <p className="hint">Avoid easy PINs like 1111 or your birth year. Keep it to yourself; your care team will never ask for it.</p>
     </AuthShell>
   );
 }

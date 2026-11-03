@@ -1,12 +1,13 @@
 // In-browser mock of the CareLoop API (doc v2, section 11). Every person, hospital, phone number and record here is invented;
 // names are kept realistic so the product reads naturally, but none of it refers to a real patient or place.
 // Clinical wording lives here, standing in for the backend; UI components never write it.
+import { maskPhone } from './format.js';
 
 const STORAGE_KEY = 'careloop-mock-v3';
 const DEFAULT_FACILITY = 'Kestrel General Hospital';
-// The sample patients belong to whichever hospital the signed-in staff member chose (see setMockFacility).
+// The sample patients belong to whichever care facility the signed-in staff member chose (see setMockFacility).
 let FACILITY = DEFAULT_FACILITY;
-const shortFacility = (name) => name.replace(/\s+(General Hospital|Teaching Hospital|Specialist Hospital|Medical Centre)$/, '');
+const shortFacility = (name) => name.replace(/\s+(General Hospital|Teaching Hospital|Specialist Hospital|Medical Centre|Pharmacy|Family Clinic|Care Home)$/, '');
 const TOMI_LINE = '0800 000 0000';
 const REVIEWER = 'Dr. Ada Okafor';
 const DEMO_PIN = '1234';
@@ -36,7 +37,7 @@ const SAMPLE_NOTES = [
 const MESSAGE_TEMPLATES = {
   medicine: { title: 'Medicine reminder', body: (first) => `CareLoop: Hello ${first}, you have a reminder from ${FACILITY}. Open the CareLoop app or call Tomi on ${TOMI_LINE}. Do not reply.` },
   test: { title: 'Test reminder', body: (first) => `CareLoop: Hello ${first}, you have a reminder from ${FACILITY}. Open the CareLoop app or call Tomi on ${TOMI_LINE}. Do not reply.` },
-  visit: { title: 'Visit reminder', body: (first) => `CareLoop: Hello ${first}, you have a hospital visit soon. Open the CareLoop app for the time and place, or call Tomi on ${TOMI_LINE}. Do not reply.` },
+  visit: { title: 'Visit reminder', body: (first) => `CareLoop: Hello ${first}, you have a care visit soon. Open the CareLoop app for the time and place, or call Tomi on ${TOMI_LINE}. Do not reply.` },
   visit_moved: { title: 'Visit time changed', body: (first) => `CareLoop: Hello ${first}, your visit time has changed. Open the CareLoop app to see the new time, or call Tomi on ${TOMI_LINE}. Do not reply.` },
   support: { title: 'Contact that may help', body: (first) => `CareLoop: Hello ${first}, your care team shared a contact that may help. Open the CareLoop app to see it, or call Tomi on ${TOMI_LINE}. Do not reply.` },
   missed_call: { title: 'Tomi tried to call', body: (first) => `CareLoop: Hello ${first}, Tomi tried to call you. Call Tomi back on ${TOMI_LINE} when you can, or open the CareLoop app. Do not reply.` },
@@ -46,7 +47,6 @@ const MANUAL_TEMPLATES = ['medicine', 'visit', 'call_clinic'];
 const QUIET_START = 21;
 const QUIET_END = 7;
 const ACTIVE_MESSAGE = ['scheduled', 'sent', 'delivered'];
-const maskPhone = (e164) => (e164 ? `${e164.slice(0, 4)} ••• ••• ${e164.slice(-4)}` : '');
 const maskEmail = (email) => (email ? email.replace(/^(.)(.*)(@.*)$/, (_, a, b, c) => `${a}${'•'.repeat(Math.min(b.length, 5))}${c}`) : '');
 
 // Move a send time out of quiet hours (21:00 to 07:00) to 07:00.

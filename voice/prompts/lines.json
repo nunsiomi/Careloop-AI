@@ -1,0 +1,59 @@
+{
+  "_about": "Tomi's fixed call lines. None of them carry clinical content; everything about a patient's plan comes from the backend after the PIN check. English is approved wording from the app. Hausa, Yoruba and Igbo are first drafts: a native speaker must check each one and set checked to true (launch checklist, section 5). The emergency line must also be approved by the clinical mentor.",
+  "en": {
+    "checked": true,
+    "greeting": "Hello, this is Tomi, an automated assistant from CareLoop.",
+    "greeting_named": "Hello {first_name}, this is Tomi, an automated assistant from CareLoop.",
+    "language_option": "For English, press 4.",
+    "no_key": "I did not hear a key press.",
+    "pin_prompt": "Please type your 4-digit CareLoop PIN on your phone keypad.",
+    "pin_wrong": "That PIN is not right. Please try again.",
+    "pin_failed": "We could not confirm who you are. Please contact your care team. Goodbye.",
+    "verified": "Thank you, {first_name}.",
+    "emergency": "If you feel very unwell, go to the nearest hospital now. I have sent a message to your care team.",
+    "goodbye": "Thank you. Goodbye.",
+    "unavailable": "Sorry, Tomi cannot help right now. Please contact your care team. Goodbye."
+  },
+  "ha": {
+    "checked": false,
+    "greeting": "Sannu, ni ce Tomi, mataimakiya ta atomatik daga CareLoop.",
+    "greeting_named": "Sannu {first_name}, ni ce Tomi, mataimakiya ta atomatik daga CareLoop.",
+    "language_option": "Don Hausa, danna 1.",
+    "no_key": "Ban ji an danna wani maɓalli ba.",
+    "pin_prompt": "Don Allah, ku danna lambar sirrinku ta CareLoop mai lamba huɗu a wayarku.",
+    "pin_wrong": "Wannan lambar sirri ba daidai ba ce. Don Allah ku sake gwadawa.",
+    "pin_failed": "Ba mu iya tabbatar da ko wane ne ku ba. Don Allah ku tuntuɓi ma'aikatan lafiyarku. Sai an jima.",
+    "verified": "Na gode, {first_name}.",
+    "emergency": "Idan kuna jin rashin lafiya sosai, ku je asibiti mafi kusa yanzu. Na aika saƙo ga ma'aikatan lafiyarku.",
+    "goodbye": "Na gode. Sai an jima.",
+    "unavailable": "Yi haƙuri, Tomi ba za ta iya taimakawa yanzu ba. Don Allah ku tuntuɓi ma'aikatan lafiyarku. Sai an jima."
+  },
+  "yo": {
+    "checked": false,
+    "greeting": "Ẹ n lẹ́, Tomi ni mí, olùrànlọ́wọ́ aládàáṣiṣẹ́ láti CareLoop.",
+    "greeting_named": "Ẹ n lẹ́ {first_name}, Tomi ni mí, olùrànlọ́wọ́ aládàáṣiṣẹ́ láti CareLoop.",
+    "language_option": "Fún Yorùbá, ẹ tẹ 2.",
+    "no_key": "Mi ò gbọ́ pé ẹ tẹ bọ́tìnnì kankan.",
+    "pin_prompt": "Ẹ jọ̀wọ́, ẹ tẹ PIN CareLoop yín, nọ́mbà mẹ́rin, lórí fóònù yín.",
+    "pin_wrong": "PIN yẹn kò tọ̀nà. Ẹ jọ̀wọ́ ẹ tún gbìyànjú.",
+    "pin_failed": "A kò lè mọ̀ dájú pé ẹ̀yin ni. Ẹ jọ̀wọ́ ẹ kàn sí àwọn olùtọ́jú yín. Ó dàbọ̀.",
+    "verified": "Ẹ ṣé, {first_name}.",
+    "emergency": "Tí ara yín kò bá yá rárá, ẹ lọ sí ilé ìwòsàn tó sún mọ́ yín jù lọ báyìí. Mo ti fi iṣẹ́ ránṣẹ́ sí àwọn olùtọ́jú yín.",
+    "goodbye": "Ẹ ṣé. Ó dàbọ̀.",
+    "unavailable": "Ẹ má bínú, Tomi kò lè ràn yín lọ́wọ́ báyìí. Ẹ jọ̀wọ́ ẹ kàn sí àwọn olùtọ́jú yín. Ó dàbọ̀."
+  },
+  "ig": {
+    "checked": false,
+    "greeting": "Ndewo, abụ m Tomi, onye enyemaka akpaaka sitere na CareLoop.",
+    "greeting_named": "Ndewo {first_name}, abụ m Tomi, onye enyemaka akpaaka sitere na CareLoop.",
+    "language_option": "Maka Igbo, pịa 3.",
+    "no_key": "Anụghị m na ị pịara bọtịnụ ọ bụla.",
+    "pin_prompt": "Biko, pịa PIN CareLoop gị, nọmba anọ, na ekwentị gị.",
+    "pin_wrong": "PIN ahụ ezighi ezi. Biko nwaa ọzọ.",
+    "pin_failed": "Anyị enweghị ike ịmata na ọ bụ gị. Biko kpọtụrụ ndị na-elekọta gị. Ka ọ dị.",
+    "verified": "Daalụ, {first_name}.",
+    "emergency": "Ọ bụrụ na ahụ adịghị gị mma nke ukwuu, gaa n'ụlọ ọgwụ kacha nso ugbu a. Ezitela m ozi nye ndị na-elekọta gị.",
+    "goodbye": "Daalụ. Ka ọ dị.",
+    "unavailable": "Ndo, Tomi enweghị ike inyere gị aka ugbu a. Biko kpọtụrụ ndị na-elekọta gị. Ka ọ dị."
+  }
+}
