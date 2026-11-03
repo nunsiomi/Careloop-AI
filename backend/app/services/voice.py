@@ -20,7 +20,8 @@ import httpx
 
 from app.db import store
 from app.security import check_secret
-from app.services import care, identity
+from app.safety import rules as safety
+from app.services import care, escalations, identity
 from app.services.activity_log import log_event
 from app.util import ApiError, first_name, make_id, not_found, now_iso
 
@@ -150,9 +151,13 @@ def call_context(call_id: str) -> dict:
 def check_turn(call_id: str, text: str) -> dict:
     call = _call(call_id)
     patient = _verified_patient(call)
-    if care.classify(text or "")["kind"] != "red_flag":
+    check = safety.check(text or "")
+    if check.action == "confirm":  # Tomi's own prompt asks again; the worker only knows continue or escalate
+        log_event(patient["id"], actor_type="system", actor_id="Safety engine", source_channel="voice", event_type="safety_check_asked",
+                  summary=f'Mentioned {check.label} with a "no" during a call.', verification_status="system_recorded")
+    if not check.escalate:
         return {"action": "continue"}
-    escalation = care.create_escalation(patient, text, "voice", call_id=call["id"])
+    escalation = escalations.create(patient, text, "voice", rule_id=check.rule_id, rule_label=f"Possible {check.label}", severity=check.severity, call_id=call["id"])
     call["escalation_id"] = escalation["id"]
     return {"action": "escalate", "escalation": {"id": escalation["id"], "call_number": care.SUPPORT["emergency_number"]}}
 
@@ -254,11 +259,15 @@ def voice_turn(session: dict, payload: dict | None) -> dict:
         return _say(session, "That PIN did not match. Please try again.", "verify", pin_required=True)
 
     intent = None if digit else care.classify(raw)
-    if (intent and intent["kind"] == "red_flag") or (not digit and confidence < 0.6 and any(term in raw.lower() for term in care.red_flag_terms())):
-        escalation = care.create_escalation(patient, raw, session["channel"], session["id"], confidence)
+    check = safety.check(raw, None if digit else confidence)
+    if check.escalate:
+        escalation = escalations.create(patient, raw, session["channel"], rule_id=check.rule_id, rule_label=f"Possible {check.label}",
+                                        severity=check.severity, call_id=session["id"], confidence=confidence)
         session["escalation_id"] = escalation["id"]
         return _say(session, care.EMERGENCY_LINE, "ended", escalation={"id": escalation["id"], "call_number": care.SUPPORT["emergency_number"]})
-    if not digit and confidence < 0.6:
+    if check.action == "confirm":
+        return _say(session, check.confirm_line(), session["state"])
+    if check.action == "clarify":
         return _say(session, "I am not sure I understood. Please say it again, or use the keypad.", session["state"])
 
     kind = intent["kind"] if intent else None

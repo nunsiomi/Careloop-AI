@@ -6,10 +6,9 @@ directly; the orchestrator validates and invokes approved tools.
 
 # backend/app/agents/checkin.py
 import json
-import os
 from pathlib import Path
 from typing import Any
-from groq import AsyncGroq
+from app.agents.llm import groq_client, model as groq_model
 
 # 1. Load System Prompt from Markdown
 PROMPT_PATH = Path(__file__).parent / "prompts" / "checkin_prompt.md"
@@ -67,14 +66,9 @@ async def run(payload: dict[str, Any]) -> dict[str, Any]:
     Expects payload with 'message', 'care_plan', and 'history'.
     Returns structured action intent, tool proposals, and reply draft.
     """
-    # Initialize Groq client using environment variables
-    # (move to the shared Groq client once it exists; launch checklist, section 3)
-    api_key = os.getenv("GROQ_API_KEY")
-    if not api_key:
-        raise ValueError("GROQ_API_KEY environment variable is missing or empty.")
-
-    client = AsyncGroq(api_key=api_key, timeout=20)
-    model = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
+    # Shared Groq client (agents/llm.py): model from GROQ_MODEL, timeouts and retries in one place
+    client = groq_client()
+    model = groq_model()
 
     patient_message = payload.get("message", "")
     care_plan = payload.get("care_plan", {})

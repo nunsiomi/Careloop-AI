@@ -18,8 +18,9 @@ Team: Dorcas, Nunsi, Olamide, Mary.
   with email codes, patients, plans (Care Plan Agent and Plan Verifier), chat, visits, email reminders,
   escalations, the Clinician Assistant and the Tomi worker's routes. It starts with the same sample facility as
   the mock. Open the app with `?mock=0` to use it.
-- **Agents:** Care Plan Agent and Plan Verifier done; Check-in Agent merged, not yet wired into chat (chat uses
-  fixed approved replies and the placeholder safety terms until Dorcas's rules are in).
+- **Agents and safety:** Care Plan, Plan Verifier, Check-in, Barrier and Escalation Summary agents are wired in.
+  Every message passes the red-flag rules first (`backend/app/safety/`). The rules are a draft until the clinical
+  mentor signs [docs/clinical-safety-review.md](docs/clinical-safety-review.md).
 - **AI models:** Groq (`GROQ_API_KEY`), not the Claude API.
 
 What's left, with owners and checkboxes: **[docs/launch-checklist.md](docs/launch-checklist.md)**. When you finish an
@@ -36,7 +37,7 @@ item, tick it there in the same commit as the work.
 | [voice/README.md](voice/README.md) | Tomi's voice worker: how a call goes, the keys it needs, how to run it |
 | [docs/plan-review-criteria.md](docs/plan-review-criteria.md) | What the plan checks flag, and what a clinician checks before approving a plan |
 | [docs/demo-script.md](docs/demo-script.md) | Click-through for teammates and judges, with every sign-in |
-| [docs/clinical-safety-review.md](docs/clinical-safety-review.md) | Clinical mentor sign-off (still to be written) |
+| [docs/clinical-safety-review.md](docs/clinical-safety-review.md) | Red-flag rules and safety policies for the clinical mentor to review and sign |
 | [CLAUDE.md](CLAUDE.md) | Rules for contributors and AI coding assistants |
 
 ## What changed in v2.2

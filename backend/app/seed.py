@@ -7,6 +7,7 @@ Loaded once into an empty database, or again by POST /api/demo/reset (only with 
 
 from datetime import datetime, timedelta
 
+from app.agents import barrier as barrier_agent
 from app.security import hash_secret
 from app.services import care, notifications, outbox
 from app.util import iso, make_id, mask_email, now_iso, parse_iso
@@ -122,7 +123,7 @@ def build() -> dict[str, list[dict]]:
              for index, (day, time, cap, taken) in enumerate([(3, "10:00", 1, 0), (3, "14:00", 1, 0), (4, "09:30", 1, 1), (6, "11:00", 2, 0)], start=1)]
     requests = [{"id": "rr-1", "appointment_id": "a-z1", "patient_id": "p-zainab", "reason": "Travel cost to the clinic on the booked day",
                  "original_text": "Ba zan iya biyan kuɗin mota ranar ba.", "channel": "voice", "requested_at": at(0, "09:20"), "status": "pending", "reviewer": None}]
-    stock_options = care.resources(FACILITY).get("stock", [])
+    stock_options = barrier_agent.approved_resources(FACILITY).get("stock", [])
     barriers = [
         {"id": "b-z1", "patient_id": "p-zainab", "task_id": "t-z2", "type": "stock", "status": "option_offered", "attempts": 1, "opened_at": at(-1, "09:17"), "options": stock_options},
         {"id": "b-t1", "patient_id": "p-tola", "task_id": "t-t1", "type": "transport", "status": "open", "attempts": 0, "opened_at": at(0, "10:05"), "options": []},

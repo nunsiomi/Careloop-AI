@@ -5,7 +5,7 @@ from app.agents import checkin
 
 
 def mock_groq(mock_groq_class, content, tool_name=None, arguments=None):
-    """Make AsyncGroq return one reply, with an optional tool call."""
+    """Make the shared Groq client return one reply, with an optional tool call."""
     mock_client = MagicMock()
     mock_groq_class.return_value = mock_client
 
@@ -31,7 +31,7 @@ def groq_key(monkeypatch):
 
 
 @pytest.mark.asyncio
-@patch("app.agents.checkin.AsyncGroq")
+@patch("app.agents.checkin.groq_client")
 async def test_checkin_agent_barrier_detection(mock_groq_class):
     mock_groq(mock_groq_class, "I understand you are having trouble affording your refill.",
               "report_barrier", '{"task_id": "task_104", "barrier_type": "cost"}')
@@ -54,7 +54,7 @@ async def test_checkin_agent_barrier_detection(mock_groq_class):
 
 
 @pytest.mark.asyncio
-@patch("app.agents.checkin.AsyncGroq")
+@patch("app.agents.checkin.groq_client")
 async def test_checkin_agent_task_done(mock_groq_class):
     mock_groq(mock_groq_class, "Great job taking your morning medication!",
               "mark_task_done", '{"task_id": "task_105"}')
@@ -76,7 +76,7 @@ async def test_checkin_agent_task_done(mock_groq_class):
 
 
 @pytest.mark.asyncio
-@patch("app.agents.checkin.AsyncGroq")
+@patch("app.agents.checkin.groq_client")
 async def test_checkin_agent_rejects_unknown_task(mock_groq_class):
     mock_groq(mock_groq_class, None, "mark_task_done", '{"task_id": "task_999"}')
 
@@ -96,7 +96,7 @@ async def test_checkin_agent_rejects_unknown_task(mock_groq_class):
 
 
 @pytest.mark.asyncio
-@patch("app.agents.checkin.AsyncGroq")
+@patch("app.agents.checkin.groq_client")
 async def test_checkin_agent_rejects_unknown_barrier(mock_groq_class):
     mock_groq(mock_groq_class, "Thanks for telling me.",
               "report_barrier", '{"task_id": "task_104", "barrier_type": "stock_out"}')
@@ -115,7 +115,7 @@ async def test_checkin_agent_rejects_unknown_barrier(mock_groq_class):
 
 
 @pytest.mark.asyncio
-@patch("app.agents.checkin.AsyncGroq")
+@patch("app.agents.checkin.groq_client")
 async def test_checkin_agent_plain_reply(mock_groq_class):
     mock_groq(mock_groq_class, "Which medicine do you mean?")
 

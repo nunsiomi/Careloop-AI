@@ -7,12 +7,13 @@ A missed task is never treated as a missed dose; it shows as overdue for the car
 
 import asyncio
 import logging
+import os
 from datetime import timedelta
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from app.db import store
-from app.services import outbox
+from app.services import escalations, outbox
 from app.services.activity_log import log_event
 from app.util import iso, now, now_iso
 
@@ -27,6 +28,7 @@ def mark_overdue() -> int:
     late = store().where("tasks", lambda task: task["status"] == "pending" and task["due_at"] < cutoff)
     for task in late:
         task["status"] = "overdue"
+        escalations.missed_critical_task(task)
         log_event(task["patient_id"], actor_type="system", actor_id="Scheduler", source_channel="system", event_type="task_overdue",
                   summary=f"{task['title']}: no report 2 hours after it was due. Not treated as a missed dose.", verification_status="system_recorded")
     return len(late)
@@ -47,6 +49,9 @@ async def tick() -> None:
                 outbox.schedule_reminders(patient)
             await outbox.send_due()
             mark_overdue()
+            await escalations.send_alerts()
+            if os.getenv("GROQ_API_KEY"):
+                await escalations.improve_briefs()
             clear_expired()
         except Exception:  # keep the scheduler alive; the next run tries again
             log.exception("Scheduler run failed")

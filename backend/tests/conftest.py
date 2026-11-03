@@ -33,8 +33,8 @@ class Mailbox:
 def mailbox(monkeypatch):
     box = Mailbox()
     from app.adapters import email
-    from app.services import identity, notifications
-    for module in (email, identity, notifications):
+    from app.services import escalations, identity, notifications
+    for module in (email, identity, notifications, escalations):
         monkeypatch.setattr(module, "send_email", box.send)
     return box
 

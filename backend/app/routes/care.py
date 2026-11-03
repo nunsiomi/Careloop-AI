@@ -5,7 +5,7 @@ from fastapi import APIRouter, Body, Request
 from app.db import store
 from app.routes.deps import patient_for, record_for, require_any, require_patient, require_staff, scoped
 from app.security import hash_secret
-from app.services import care, outbox, plans
+from app.services import care, chat, escalations, outbox, plans
 from app.services.activity_log import log_event
 from app.util import EMAIL_PATTERN, ApiError, make_id, normalize_phone, now_iso
 
@@ -160,7 +160,7 @@ def get_messages(patient_id: str, request: Request):
 
 
 @router.post("/patients/{patient_id}/messages")
-def send_message(patient_id: str, request: Request, body: dict = Body(default={})):
+async def send_message(patient_id: str, request: Request, body: dict = Body(default={})):
     actor = require_patient(request)
     patient = patient_for(actor, patient_id)
     text = str(body.get("original_text") or "").strip()
@@ -172,11 +172,13 @@ def send_message(patient_id: str, request: Request, body: dict = Body(default={}
         prompt = store().first("messages", lambda item: not item.get("answered"), task_id=body["task_id"], patient_id=patient_id)
         if prompt:
             prompt["answered"] = True
-    result = care.chat_reply(patient, {**body, "original_text": text}, actor.name if actor.kind == "caregiver" else None)
+    result = await chat.handle(patient, {**body, "original_text": text}, actor.name if actor.kind == "caregiver" else None)
     escalation = {"id": result["escalation"]["id"], "call_number": care.SUPPORT["emergency_number"]} if result["escalation"] else None
     reply = store().add("messages", {"id": make_id("m"), "patient_id": patient_id, "direction": "careloop", "channel": "web", "original_text": result["reply"],
                                      "english_text": result["reply"], "language": patient["language"], "confidence": 0.98, "number_check_passed": True,
                                      "created_at": now_iso(), **({"barrier": result["barrier"]} if result["barrier"] else {}), **({"escalation": escalation} if escalation else {})})
+    if escalation:
+        await escalations.send_alerts()  # tell the care team now, not at the next scheduler run
     return {"reply": reply, "barrier": result["barrier"], "escalation": escalation, "reschedule": result["reschedule"]}
 
 

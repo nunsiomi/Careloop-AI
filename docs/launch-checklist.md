@@ -14,8 +14,8 @@ Last updated: 3 Nov 2026
 |---|---|
 | 1. Accounts and keys | 0 / 11 |
 | 2. Backend core | 11 / 13 |
-| 3. Agents | 3 / 9 |
-| 4. Safety | 0 / 5 |
+| 3. Agents | 6 / 9 |
+| 4. Safety | 3 / 5 |
 | 5. Tomi voice | 1 / 6 |
 | 6. Frontend | 5 / 13 |
 | 7. Deploy | 1 / 7 |
@@ -92,7 +92,7 @@ The contract is `docs/api_shapes.md`. Each route should return exactly what the 
 All agents call Groq through one shared client, so the model can be changed in one place.
 
 - [x] Shared Groq client: model from `GROQ_MODEL`, timeouts, retries, JSON output checked against a schema. — Olamide
-  (done by Nunsi, 3 Nov 2026: `agents/llm.py`, used by the plan agents; move the Check-in Agent onto it with Dorcas)
+  (done by Nunsi, 3 Nov 2026: `agents/llm.py`, used by the plan, Check-in and Escalation Summary agents)
 - [x] Care Plan Agent: discharge note → draft plan for clinician review. — Mary (done by Nunsi, 3 Nov 2026:
   `agents/care_plan.py`; removes anything the note does not support; run on the five sample notes with Groq)
 - [x] Plan Verifier Agent: flags anything in the draft not found in the note. — Mary (done by Nunsi, 3 Nov 2026:
@@ -100,10 +100,13 @@ All agents call Groq through one shared client, so the model can be changed in o
   notebook `notebooks/care_plan_verifier.ipynb`)
 - [ ] Mary reviews the plan agents, the seeded notes and `docs/plan-review-criteria.md`, and agrees the plan
   schema (`backend/app/models.py`) with Olamide. — Mary
-- [ ] Check-in Agent: Tomi's daily check-ins in chat. — Dorcas
-  Module merged 3 Nov 2026 (PR #1) and fixed (async Groq, barrier types, task checks); tick once chat uses it.
-- [ ] Barrier Agent: cost, transport and distance problems → hospital resources. — Dorcas
-- [ ] Escalation Agent: red flags → open escalation on the dashboard. — Dorcas
+- [x] Check-in Agent: Tomi's daily check-ins in chat. — Dorcas
+  (done by Nunsi, 3 Nov 2026: wired into chat in `services/chat.py`; marking a task done waits for the patient's "yes", and its replies
+  pass the number check and an advice guard or a fixed line is sent. Run with Groq, including a Hausa message)
+- [x] Barrier Agent: cost, transport and distance problems → hospital resources. — Dorcas (done by Nunsi, 3 Nov 2026: `agents/barrier.py`,
+  approved contacts only; escalates after 2 options that did not work)
+- [x] Escalation Agent: red flags → open escalation on the dashboard. — Dorcas (done by Nunsi, 3 Nov 2026: `agents/escalation.py` and
+  `services/escalations.py`; fact-only brief, care-team email without patient details, backup after 15 minutes)
 - [ ] Language Agent: Hausa, Yoruba, Igbo and plain English, reading level checks. — Nunsi
 - [ ] Clinician Assistant: `POST /assistant/drafts` and `POST /assistant/apply`, same rules as the mock
   (only what the clinician said, missing details flagged, no texts or calls without consent). — Nunsi
@@ -111,10 +114,14 @@ All agents call Groq through one shared client, so the model can be changed in o
 ## 4. Safety
 
 - [ ] `red_flags.json` filled in with the clinical mentor. — Dorcas
-- [ ] Safety rules run before any agent reply reaches a patient; red flags skip the model entirely. — Dorcas
-- [ ] Numbers in outgoing text (doses, times) checked against the approved plan. — Dorcas
+  Draft written 3 Nov 2026 (8 rules in four languages, negation and unclear-speech handling, amber policies); waiting
+  for the mentor and native speakers: `docs/clinical-safety-review.md`.
+- [x] Safety rules run before any agent reply reaches a patient; red flags skip the model entirely. — Dorcas
+  (done by Nunsi, 3 Nov 2026: `safety/rules.py` on every chat message and voice turn; tests per language in `tests/test_safety.py`)
+- [x] Numbers in outgoing text (doses, times) checked against the approved plan. — Dorcas (done by Nunsi, 3 Nov 2026: `safety/number_check.py`)
 - [ ] Low-confidence speech is read back to the patient or sent to a person. — Nunsi
-- [ ] SMS and email templates never name a medicine, condition or test. — Olamide
+- [x] SMS and email templates never name a medicine, condition or test. — Olamide (done by Nunsi, 3 Nov 2026: checked in
+  `tests/test_notifications.py` for every template)
 
 ## 5. Tomi voice
 

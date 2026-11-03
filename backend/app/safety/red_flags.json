@@ -1,1 +1,110 @@
-{}
+{
+  "_about": "Deterministic red-flag rules (owner: Dorcas; enforcement in safety/rules.py). DRAFT: none of this is approved. The clinical mentor must review every rule, term and policy in docs/clinical-safety-review.md before any real-world test, and a native speaker must check the Hausa, Yoruba and Igbo terms (checked: false). Terms are matched case-insensitively after removing tone marks and mapping hooked letters (ƙ->k, ɗ->d, ɓ->b), anywhere in the message, in every language at once (patients mix languages). Keyword lists are not a guarantee of safety: they err towards escalating, and a negated mention ('no chest pain') is checked with the patient instead of ignored.",
+  "version": "draft-2026-11-03",
+  "approved_by": null,
+  "approved_at": null,
+  "emergency_line": "This may need urgent care. Please go to the nearest hospital now, or call 112. I have sent this to your care team.",
+  "confirm_line": "Just to be safe: are you having {label} now? If you feel very unwell, go to the nearest hospital now.",
+  "low_confidence_threshold": 0.6,
+  "negation_cues": {
+    "en": ["no", "not", "never", "without", "don't have", "do not have", "didn't have", "no more", "denies"],
+    "ha": ["babu", "ba ni da", "bana jin"],
+    "yo": ["ko si", "mi o ni", "ko ni"],
+    "ig": ["enweghi m", "o dighi"]
+  },
+  "rules": [
+    {
+      "id": "possible_chest_pain", "label": "chest pain", "severity": "red",
+      "terms": {
+        "en": ["chest pain", "chest hurts", "chest hurt", "chest is hurting", "pain in my chest", "chest tight", "tight chest", "pressure in my chest", "chest"],
+        "ha": ["ciwon kirji", "kirjina yana ciwo", "kirji"],
+        "yo": ["aya mi n dun", "aya n dun mi", "irora aya"],
+        "ig": ["obi na-afu m ufu", "uzu obi", "obi m na-afu"]
+      },
+      "checked": {"en": true, "ha": false, "yo": false, "ig": false}
+    },
+    {
+      "id": "possible_breathing_problem", "label": "trouble breathing", "severity": "red",
+      "terms": {
+        "en": ["can't breathe", "cannot breathe", "can not breathe", "hard to breathe", "trouble breathing", "difficulty breathing", "short of breath", "shortness of breath", "breathless", "not breathing", "struggling to breathe", "choking"],
+        "ha": ["numfashi yana min wuya", "ba na iya numfashi", "numfashi"],
+        "yo": ["mi o le mi", "ko le mi", "emi mi n kuru", "mimi"],
+        "ig": ["enweghi m ike iku ume", "iku ume na-esiri m ike", "ume"]
+      },
+      "checked": {"en": true, "ha": false, "yo": false, "ig": false}
+    },
+    {
+      "id": "possible_fainting", "label": "fainting", "severity": "red",
+      "terms": {
+        "en": ["fainted", "fainting", "faint", "passed out", "blacked out", "unconscious", "collapsed", "won't wake up"],
+        "ha": ["suma", "ya suma", "na suma"],
+        "yo": ["daku", "o daku", "mo daku"],
+        "ig": ["dara mba", "ida mba", "tufuo uche"]
+      },
+      "checked": {"en": true, "ha": false, "yo": false, "ig": false}
+    },
+    {
+      "id": "possible_stroke", "label": "signs of a stroke", "severity": "red",
+      "terms": {
+        "en": ["face drooping", "face is drooping", "one side of my body", "can't move my arm", "cannot move my arm", "slurred speech", "can't speak properly", "sudden weakness", "numb on one side"],
+        "ha": ["shanyewar jiki", "bakina ya karkace"],
+        "yo": ["roparose", "enu mi ti wo"],
+        "ig": ["otu akuku aru anaghi aga", "onu m gbagoro agbago"]
+      },
+      "checked": {"en": true, "ha": false, "yo": false, "ig": false}
+    },
+    {
+      "id": "possible_heavy_bleeding", "label": "heavy bleeding", "severity": "red",
+      "terms": {
+        "en": ["bleeding a lot", "bleeding heavily", "won't stop bleeding", "will not stop bleeding", "lot of blood", "vomiting blood", "coughing blood", "coughing up blood", "blood in my stool", "black stool"],
+        "ha": ["zubar jini", "jini yana zuba", "amai da jini"],
+        "yo": ["eje n san", "eje ko duro", "bi eje"],
+        "ig": ["obara na-agbapu", "obara anaghi akwusi", "agbo obara"]
+      },
+      "checked": {"en": true, "ha": false, "yo": false, "ig": false}
+    },
+    {
+      "id": "possible_seizure", "label": "a seizure", "severity": "red",
+      "terms": {
+        "en": ["seizure", "having a fit", "convulsion", "convulsing", "shaking and can't stop"],
+        "ha": ["farfadiya"],
+        "yo": ["giri", "warapa"],
+        "ig": []
+      },
+      "checked": {"en": true, "ha": false, "yo": false, "ig": false}
+    },
+    {
+      "id": "possible_allergic_reaction", "label": "a serious allergic reaction", "severity": "red",
+      "terms": {
+        "en": ["throat is closing", "throat swelling", "swollen throat", "face swelling", "lips swelling", "swollen tongue", "tongue is swelling"],
+        "ha": ["makogwaro ya kumbura", "fuskata ta kumbura"],
+        "yo": ["ofun mi wu", "oju mi wu"],
+        "ig": ["akpiri m zara", "iru m zara"]
+      },
+      "checked": {"en": true, "ha": false, "yo": false, "ig": false}
+    },
+    {
+      "id": "possible_self_harm", "label": "thoughts of harming yourself", "severity": "red",
+      "terms": {
+        "en": ["kill myself", "end my life", "hurt myself", "harm myself", "don't want to live", "suicide", "better off dead"],
+        "ha": ["kashe kaina", "bana son rayuwa"],
+        "yo": ["pa ara mi", "mi o fe gbe aye mo"],
+        "ig": ["igbu onwe m", "achoghi m ibi ndu"]
+      },
+      "checked": {"en": true, "ha": false, "yo": false, "ig": false}
+    }
+  ],
+  "policies": {
+    "missed_critical_task": {
+      "enabled": true, "after_hours": 2, "severity": "amber", "label": "Critical medicine overdue",
+      "note": "A high-criticality task with no report 2 hours after it was due. Never treated as a missed dose; the care team follows up."
+    },
+    "barrier_unresolved": {
+      "enabled": true, "after_attempts": 2, "severity": "amber", "label": "Barrier not resolved after 2 attempts"
+    },
+    "acknowledgement": {
+      "backup_after_minutes": 15,
+      "note": "Every escalation emails the facility's care team at once. If nobody acknowledges it in time, the backup contact is emailed again and the dashboard history records it. An escalation is never treated as acknowledged until a reviewer acts."
+    }
+  }
+}
