@@ -157,7 +157,7 @@ Notification: { "id": "n-1", "patient_id": "p-zainab", "channel": "sms | email",
 | `listMessageTemplates({ patient_id })` | `GET /patients/{id}/message-templates` | | `{ templates: [{ id, title, body }] }` (bodies with the patient's first name filled in) |
 | `sendPatientMessage(body)` | `POST /notifications` | `{ patient_id, channel, template, by }` | `{ notification }`; 403 without consent |
 | `cancelNotification(id, body)` | `POST /notifications/{id}/cancel` | `{ by }` | `{ notification }`; 409 if already sent |
-| `retryNotification(id, body)` | `POST /notifications/{id}/retry` | `{ by }` | `{ notification }` (a new message with `retry_of`) |
+| `retryNotification(id, body)` | `POST /notifications/{id}/retry` | `{ by }` | `{ notification }` (a new message with `retry_of`). 409 unless the message failed and has not been sent again already |
 | `updateConsent(patientId, body)` | `PATCH /patients/{id}/consent` | `{ channels }` | `{ patient }`; logs a `consent_withdrawn` event for anything removed |
 
 ## Sign-in and accounts *(added; section 11 does not cover auth)*
@@ -271,7 +271,7 @@ The mock adds `demo_code` to challenges, `demo_link` to reset responses and `dem
 | `sendVoiceInput(id, body)` | `POST /voice/sessions/{id}/input` *(added; mock only)* | `{ transcript?, confidence?, digit?, pin? }` | `{ turns[], state, keypad[], ended, pin_required?, escalation?, barrier? }` |
 | `endVoiceSession(id)` | `POST /voice/sessions/{id}/end` *(added)* | | `{ ok }` |
 | `listEscalations(filters)` | `GET /escalations?status=open` | `open` means any status except resolved | `{ escalations[] }` |
-| `acknowledgeEscalation(id, body)` | `POST /escalations/{id}/acknowledge` | `{ by }` | `{ escalation }` |
+| `acknowledgeEscalation(id, body)` | `POST /escalations/{id}/acknowledge` | `{ by }` | `{ escalation }`; no change if it is already acknowledged or resolved |
 | `resolveEscalation(id, body)` | `POST /escalations/{id}/resolve` | `{ note, by }` | `{ escalation }` |
 
 ## Browser voice (Tomi)

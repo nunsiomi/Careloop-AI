@@ -376,6 +376,8 @@ def retry_notification(notification_id: str, request: Request):
     actor = require_staff(request)
     original = record_for(actor, "notifications", notification_id, "Message")
     patient = care.find_patient(original["patient_id"])
+    if original["status"] != "failed" or original.get("retried"):
+        raise ApiError("This message has already been sent again." if original.get("retried") else "Only a message that was not delivered can be sent again.", 409)
     if original["channel"] not in outbox.notifications.message_channels(patient):
         raise ApiError(f"{patient['name']} has turned this channel off.", 403)
     message = outbox.queue_message(patient, channel=original["channel"], template=original["template"], task_id=original.get("task_id"),
@@ -397,6 +399,8 @@ def list_escalations(request: Request, status: str | None = None):
 def acknowledge_escalation(escalation_id: str, request: Request):
     actor = require_staff(request)
     escalation = record_for(actor, "escalations", escalation_id, "Escalation")
+    if escalation["status"] in ("acknowledged", "resolved"):
+        return {"escalation": care.with_patient(escalation)}
     escalation["status"] = "acknowledged"
     escalation["history"].append({"status": "acknowledged", "at": now_iso(), "by": actor.name})
     log_event(escalation["patient_id"], actor_type="clinician", actor_id=actor.name, source_channel="dashboard", event_type="escalation_acknowledged",

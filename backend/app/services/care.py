@@ -169,8 +169,12 @@ def report_task(patient: dict, task: dict | None, status: str, channel: str, act
     task["status"] = {"done": "patient_reported_done", "unable": "unable"}.get(status, task["status"])
     task["last_reported_at"] = now_iso()
     summaries = {"done": f"{task['title']}: reported as done.", "not_yet": f"{task['title']}: reported as not yet done.", "unable": f"{task['title']}: reported as not possible."}
+    # A second report about the same task is a correction: a new event that points at the one it replaces.
+    earlier = max(store().where("events", patient_id=patient["id"], event_type="task_reported", target_id=task["id"]),
+                  key=lambda item: item["recorded_at"], default=None)
     log_event(patient["id"], actor_type="patient", actor_id=actor or patient["name"], source_channel=channel, event_type="task_reported",
-              summary=summaries[status], verification_status="self_reported", target_id=task["id"])
+              summary=summaries[status], verification_status="self_reported", target_id=task["id"],
+              supersedes_event_id=earlier["id"] if earlier else None)
     if status == "done":
         outbox.cancel_messages(patient["id"], lambda item: item.get("task_id") == task["id"], "Not needed. The patient already reported it done.")
 

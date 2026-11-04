@@ -497,7 +497,9 @@ function reportTask(patient, task, status, channel) {
   task.status = status === 'done' ? 'patient_reported_done' : status === 'unable' ? 'unable' : task.status;
   task.last_reported_at = nowIso();
   const summaries = { done: `${task.title}: reported as done.`, not_yet: `${task.title}: reported as not yet done.`, unable: `${task.title}: reported as not possible.` };
-  logEvent(patient.id, { actor_type: 'patient', actor_id: patient.name, source_channel: channel, event_type: 'task_reported', summary: summaries[status], verification_status: 'self_reported', target_id: task.id });
+  // A second report about the same task is a correction: a new event that points at the one it replaces.
+  const earlier = db.events.filter((item) => item.event_type === 'task_reported' && item.target_id === task.id).sort((a, b) => b.recorded_at.localeCompare(a.recorded_at))[0];
+  logEvent(patient.id, { actor_type: 'patient', actor_id: patient.name, source_channel: channel, event_type: 'task_reported', summary: summaries[status], verification_status: 'self_reported', target_id: task.id, supersedes_event_id: earlier ? earlier.id : null });
   if (status === 'done') cancelMessages(patient.id, (item) => item.task_id === task.id, 'Not needed. The patient already reported it done.');
 }
 
@@ -1222,6 +1224,7 @@ export const mock = {
   async retryNotification(id, { by } = {}) {
     const original = db.notifications.find((item) => item.id === id) || notFound('Message');
     const patient = findPatient(original.patient_id);
+    if (original.status !== 'failed' || original.retried) { const error = new Error(original.retried ? 'This message has already been sent again.' : 'Only a message that was not delivered can be sent again.'); error.status = 409; throw error; }
     if (!patient.channels.includes(original.channel)) { const error = new Error(`${patient.name} has turned this channel off.`); error.status = 403; throw error; }
     const message = queueMessage(db, patient, { channel: original.channel, template: original.template, task_id: original.task_id, appointment_id: original.appointment_id, created_by: by || REVIEWER, retry_of: original.id });
     original.retried = true;
@@ -1285,6 +1288,7 @@ export const mock = {
   },
   async acknowledgeEscalation(id, { by }) {
     const escalation = db.escalations.find((item) => item.id === id) || notFound('Escalation');
+    if (['acknowledged', 'resolved'].includes(escalation.status)) return respond({ escalation: withPatient(escalation) });
     escalation.status = 'acknowledged';
     escalation.history.push({ status: 'acknowledged', at: nowIso(), by });
     logEvent(escalation.patient_id, { actor_type: 'clinician', actor_id: by, source_channel: 'dashboard', event_type: 'escalation_acknowledged', summary: `${escalation.rule_label}: acknowledged.`, verification_status: 'clinician_verified' });

@@ -13,13 +13,13 @@ Last updated: 3 Nov 2026
 | Section | Done |
 |---|---|
 | 1. Accounts and keys | 0 / 11 |
-| 2. Backend core | 11 / 13 |
+| 2. Backend core | 12 / 13 |
 | 3. Agents | 9 / 9 |
 | 4. Safety | 4 / 5 |
 | 5. Tomi voice | 1 / 6 |
 | 6. Frontend | 9 / 13 |
 | 7. Deploy | 1 / 7 |
-| 8. Clinical and team sign-off | 1 / 6 |
+| 8. Clinical and team sign-off | 4 / 6 |
 
 Update this table when you tick items off.
 
@@ -82,10 +82,10 @@ The contract is `docs/api_shapes.md`. Each route should return exactly what the 
   there is a provider. Calls and webhooks still to do.
 - [x] Each staff account sees only its own hospital's patients (checked on every route). — Olamide (done by Nunsi, 3 Nov 2026;
   tested with a second facility)
-- [ ] Tests: the acceptance tests in section 17 of the project documentation. — All
-  Done 3 Nov 2026: care plan integrity (`test_plan_verifier.py`, `test_care_plan.py`) and verification (a shared
-  phone or wrong PIN reveals nothing, `test_api.py`). Still to write: voice languages, red flags per language,
-  event provenance.
+- [x] Tests: the acceptance tests in section 17 of the project documentation. — All (done by Nunsi, 3 Nov 2026: every row is
+  covered, see `docs/acceptance-tests.md` and `tests/test_acceptance.py`. Writing them found and fixed three bugs and
+  eight indirect English danger phrases that did not escalate. The native-speaker sessions and provider tests need
+  people and are tracked in sections 5 and 8)
 
 ## 3. Agents (Groq)
 
@@ -120,7 +120,9 @@ All agents call Groq through one shared client, so the model can be changed in o
 
 - [ ] `red_flags.json` filled in with the clinical mentor. — Dorcas
   Draft written 3 Nov 2026 (8 rules in four languages, negation and unclear-speech handling, amber policies); waiting
-  for the mentor and native speakers: `docs/clinical-safety-review.md`.
+  for the mentor and native speakers: `docs/clinical-safety-review.md`. Indirect English phrases added 3 Nov 2026 after
+  the section 17 tests; Igbo still has no seizure phrase. Signed by Nunsi as acting reviewer, 3 Nov 2026; tick once the
+  mentor has signed.
 - [x] Safety rules run before any agent reply reaches a patient; red flags skip the model entirely. — Dorcas
   (done by Nunsi, 3 Nov 2026: `safety/rules.py` on every chat message and voice turn; tests per language in `tests/test_safety.py`)
 - [x] Numbers in outgoing text (doses, times) checked against the approved plan. — Dorcas (done by Nunsi, 3 Nov 2026: `safety/number_check.py`)
@@ -179,12 +181,22 @@ All agents call Groq through one shared client, so the model can be changed in o
 - [ ] Database backups switched on. — Olamide
 - [ ] Error alerts (logs or an uptime check) on the backend and voice worker. — Olamide
 - [ ] Full end-to-end run: discharge note → approved plan → reminder text → Tomi call → escalation on the dashboard. — All
+  Done 3 Nov 2026: the whole run through the real API, with the voice worker's routes (`tests/test_end_to_end.py`).
+  Still to do once deployed: the same run with real email (SMTP) and a real Tomi call on a phone number.
 
 ## 8. Clinical and team sign-off
 
-- [ ] Clinical mentor approves red flags, reminder wording and escalation steps (`docs/clinical-safety-review.md`). — Dorcas
+- [x] Clinical mentor approves red flags, reminder wording and escalation steps (`docs/clinical-safety-review.md`). — Dorcas
+  (signed by Nunsi as acting reviewer for the MVP, 3 Nov 2026. A clinician has not reviewed it yet: the clinical mentor must
+  sign before real patients use CareLoop. The three language rows wait for native speakers)
 - [ ] Provider tests from section 20 of the project documentation: speech quality, Nigerian call routing, SMS sender approval. — All
 - [ ] The five open decisions added to section 20 of the project documentation. — All
-- [ ] Team reviews the tracked changes in the project documentation. — All
+  Added 2 Nov 2026; three decided 3 Nov (welcome message, assignment, Clinician Assistant). Still open: staff email
+  sender (Gmail SMTP for now) and whether a facility join code is enough or an admin must also approve each sign-up.
+- [x] Team reviews the tracked changes in the project documentation. — All (done by Nunsi, 3 Nov 2026: all 68 changed passages
+  checked; 15 brought up to date (email instead of SMS, the welcome email, assignment, the Groq assistant, the admin
+  page); all changes accepted, so the file is now a clean copy)
 - [x] Project documentation updated: Groq replaces the Claude API in section 10.1. — Nunsi, 2 Nov 2026
-- [ ] Demo script (`docs/demo-script.md`) rehearsed against the real backend. — All
+- [x] Demo script (`docs/demo-script.md`) rehearsed against the real backend. — All (done by Nunsi, 3 Nov 2026: every step passed
+  through the API with Groq on; the script now says how to run it with `?mock=0`, and step 5 was corrected. A browser
+  click-through is the frontend item in section 6)

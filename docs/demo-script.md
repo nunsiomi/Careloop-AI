@@ -62,15 +62,34 @@ Facility codes are for staff only. Patients and family helpers never use them; t
 4. **Reminders.** The Reminders page shows texts and emails that are scheduled, sent and not delivered. Texts never
    name a medicine or illness. Retry the failed one.
 5. **Patient side.** Open `/patient/` and sign in as Zainab. Today shows her day as a loop. Tap Tomi to chat or talk,
-   report a medicine as taken, or say the clinic is too far. With presenter mode on, the patient menu can play an
-   incoming Tomi call.
+   report a medicine as taken, or say the clinic is too far. With presenter mode on, the patient's **Presenter** menu
+   sends a chat reminder now, and the dashboard's **Calls** page can play an incoming Tomi call from Zainab.
 6. **Escalation.** In the patient chat, type something that mentions chest pain. The dashboard shows a new red
    escalation, and the patient is told to go to the nearest hospital now.
 7. **Start again.** With presenter mode on, use **Presenter: start the walkthrough again** in the dashboard sidebar.
 
+## Against the real backend
+
+Rehearsed on 3 Nov 2026: every step above passed against the FastAPI backend with Groq switched on (the steps are
+driven through the same API calls the screens make). What changes from the in-browser version:
+
+1. Start the backend from `backend/` with `..oice\.venv\Scripts\python -m uvicorn app.main:app --port 8000`, and the
+   frontend from `frontend/` with `npm run dev`. Open the pages with `?mock=0` (for example
+   `http://localhost:5173/clinician/?mock=0&presenter=1`). Vite passes `/api` to port 8000.
+2. Set `CARELOOP_DEMO=1` in `.env` for the presenter tools (reset, scripted calls, sample notes).
+3. Sign-in codes go by real email when `SMTP_HOST` is set. Without it they are printed in the backend's terminal
+   (`Email (not sent, EMAIL_PROVIDER=console)`), so keep that window visible.
+4. **Start the walkthrough again** reloads the sample data and signs everyone out. Sign in again after it.
+5. Timings with Groq: the assistant's draft takes about 5 seconds, and a chat reply about 8 to 9 seconds while the
+   Language Agent translates it. Pause and say so rather than clicking again.
+6. A chat reply can come back in English with the patient's language chosen. That is on purpose: the Language Agent's
+   translation is shown only if every number and medicine name survives; otherwise the approved English is shown.
+7. The browser voice sheet uses LiveKit when `LIVEKIT_URL` is set and the voice worker is running; without them it
+   falls back to the scripted voice.
+
 ## What is not real yet
 
 - No real texts, emails or calls are sent. Each one appears on screen the way a phone notification would.
-- The assistant and Tomi run on simple rules in the browser, standing in for the backend agents
-  (contract in `docs/api_shapes.md`).
+- In the in-browser version, the assistant and Tomi run on simple rules, standing in for the backend agents
+  (contract in `docs/api_shapes.md`). With `?mock=0` they are the real Groq agents.
 - Voice typing in the dashboard assistant needs Chrome or Edge.

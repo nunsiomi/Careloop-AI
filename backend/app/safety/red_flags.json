@@ -26,7 +26,7 @@
     {
       "id": "possible_breathing_problem", "label": "trouble breathing", "severity": "red",
       "terms": {
-        "en": ["can't breathe", "cannot breathe", "can not breathe", "hard to breathe", "trouble breathing", "difficulty breathing", "short of breath", "shortness of breath", "breathless", "not breathing", "struggling to breathe", "choking"],
+        "en": ["can't breathe", "cannot breathe", "can not breathe", "hard to breathe", "trouble breathing", "difficulty breathing", "short of breath", "shortness of breath", "breathless", "not breathing", "struggling to breathe", "choking", "gasping for air", "gasping"],
         "ha": ["numfashi yana min wuya", "ba na iya numfashi", "numfashi"],
         "yo": ["mi o le mi", "ko le mi", "emi mi n kuru", "mimi"],
         "ig": ["enweghi m ike iku ume", "iku ume na-esiri m ike", "ume"]
@@ -36,7 +36,7 @@
     {
       "id": "possible_fainting", "label": "fainting", "severity": "red",
       "terms": {
-        "en": ["fainted", "fainting", "faint", "passed out", "blacked out", "unconscious", "collapsed", "won't wake up"],
+        "en": ["fainted", "fainting", "faint", "passed out", "blacked out", "unconscious", "collapsed", "won't wake up", "could not wake up", "can't wake", "not responding", "unresponsive"],
         "ha": ["suma", "ya suma", "na suma"],
         "yo": ["daku", "o daku", "mo daku"],
         "ig": ["dara mba", "ida mba", "tufuo uche"]
@@ -46,7 +46,7 @@
     {
       "id": "possible_stroke", "label": "signs of a stroke", "severity": "red",
       "terms": {
-        "en": ["face drooping", "face is drooping", "one side of my body", "can't move my arm", "cannot move my arm", "slurred speech", "can't speak properly", "sudden weakness", "numb on one side"],
+        "en": ["face drooping", "face is drooping", "one side of my body", "can't move my arm", "cannot move my arm", "slurred speech", "can't speak properly", "sudden weakness", "numb on one side", "weak on one side", "cannot talk properly", "can't talk properly", "speech is slurred"],
         "ha": ["shanyewar jiki", "bakina ya karkace"],
         "yo": ["roparose", "enu mi ti wo"],
         "ig": ["otu akuku aru anaghi aga", "onu m gbagoro agbago"]
@@ -56,7 +56,7 @@
     {
       "id": "possible_heavy_bleeding", "label": "heavy bleeding", "severity": "red",
       "terms": {
-        "en": ["bleeding a lot", "bleeding heavily", "won't stop bleeding", "will not stop bleeding", "lot of blood", "vomiting blood", "coughing blood", "coughing up blood", "blood in my stool", "black stool"],
+        "en": ["bleeding a lot", "bleeding heavily", "won't stop bleeding", "will not stop bleeding", "lot of blood", "vomiting blood", "coughing blood", "coughing up blood", "blood in my stool", "black stool", "blood in my vomit", "blood in vomit"],
         "ha": ["zubar jini", "jini yana zuba", "amai da jini"],
         "yo": ["eje n san", "eje ko duro", "bi eje"],
         "ig": ["obara na-agbapu", "obara anaghi akwusi", "agbo obara"]
@@ -66,7 +66,7 @@
     {
       "id": "possible_seizure", "label": "a seizure", "severity": "red",
       "terms": {
-        "en": ["seizure", "having a fit", "convulsion", "convulsing", "shaking and can't stop"],
+        "en": ["seizure", "having a fit", "convulsion", "convulsing", "shaking and can't stop", "shaking all over"],
         "ha": ["farfadiya"],
         "yo": ["giri", "warapa"],
         "ig": []
@@ -76,7 +76,7 @@
     {
       "id": "possible_allergic_reaction", "label": "a serious allergic reaction", "severity": "red",
       "terms": {
-        "en": ["throat is closing", "throat swelling", "swollen throat", "face swelling", "lips swelling", "swollen tongue", "tongue is swelling"],
+        "en": ["throat is closing", "throat swelling", "swollen throat", "face swelling", "lips swelling", "lips are swelling", "swollen lips", "swollen tongue", "tongue is swelling"],
         "ha": ["makogwaro ya kumbura", "fuskata ta kumbura"],
         "yo": ["ofun mi wu", "oju mi wu"],
         "ig": ["akpiri m zara", "iru m zara"]
@@ -86,7 +86,7 @@
     {
       "id": "possible_self_harm", "label": "thoughts of harming yourself", "severity": "red",
       "terms": {
-        "en": ["kill myself", "end my life", "hurt myself", "harm myself", "don't want to live", "suicide", "better off dead"],
+        "en": ["kill myself", "end my life", "hurt myself", "harm myself", "don't want to live", "suicide", "better off dead", "giving up on life", "want to die"],
         "ha": ["kashe kaina", "bana son rayuwa"],
         "yo": ["pa ara mi", "mi o fe gbe aye mo"],
         "ig": ["igbu onwe m", "achoghi m ibi ndu"]
