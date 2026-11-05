@@ -177,10 +177,16 @@ async def send_code_email(to_email: str, code: str, subject: str, text: str, *, 
     return await (send_mail or send_email)(to_email, subject, text)
 
 
-async def send_sign_in_code(to_email: str, code: str, *, send_mail: Sender | None = None) -> SendResult:
+def greeting(name: str | None) -> str:
+    first = (name or "").strip().split(" ")[0]
+    return f"Hello {first}," if first else "Hello,"
+
+
+async def send_sign_in_code(to_email: str, code: str, name: str | None = None, *, send_mail: Sender | None = None) -> SendResult:
     """Patient and caregiver sign-in codes by email. Same wording as the mock."""
-    text = (f"Your CareLoop sign-in code is {code}. It works for 5 minutes.\n\n"
-            "Never share it, not even with your care team. If you did not ask for it, you can ignore this email.")
+    text = (f"{greeting(name)}\n\nHere is your code to sign in to CareLoop:\n\n    {code}\n\n"
+            "It works for 5 minutes. Never share it, not even with your care team. "
+            "If you did not ask for it, you can ignore this email.\n\nThe CareLoop team")
     return await send_code_email(to_email, code, "Your CareLoop sign-in code", text, send_mail=send_mail)
 
 

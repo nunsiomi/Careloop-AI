@@ -14,7 +14,7 @@ from app.agents import language as language_agent
 from app.db import store
 from app.security import check_code, check_secret, hash_code, hash_secret, new_session_token, password_problem, rate_limit, session_key
 from app.services.activity_log import log_event
-from app.services.notifications import send_code_email, send_sign_in_code, send_sign_in_code_sms
+from app.services.notifications import greeting, send_code_email, send_sign_in_code, send_sign_in_code_sms
 from app.util import (EMAIL_PATTERN, ApiError, first_name, in_seconds, make_id, mask_email, mask_phone, normalize_phone,
                       now_iso, six_digits, token)
 
@@ -47,11 +47,15 @@ def _holder(e164: str) -> dict | None:
     return None
 
 
-def _holder_email(holder: dict | None) -> str | None:
+def _holder_record(holder: dict | None) -> dict:
     if not holder:
-        return None
+        return {}
     record = store().get("caregivers", holder["caregiver_id"]) if holder["kind"] == "caregiver" else store().get("patients", holder["patient_id"])
-    return (record or {}).get("email")
+    return record or {}
+
+
+def _holder_email(holder: dict | None) -> str | None:
+    return _holder_record(holder).get("email")
 
 
 def _challenge_view(challenge: dict) -> dict:
@@ -80,7 +84,7 @@ async def _send_challenge_code(challenge: dict) -> None:
                 raise ApiError(f"We could not {'call' if by_call else 'text'} you just now. Try again in a minute, or choose email.", 502)
         return
     if challenge.get("email"):  # unknown number or no email on file: nothing is sent, same answer
-        result = await send_sign_in_code(challenge["email"], code)
+        result = await send_sign_in_code(challenge["email"], code, _holder_record(challenge.get("holder")).get("name"))
         if not result.ok and challenge.get("show_email"):
             raise ApiError("We could not send the email just now. Try again in a minute.", 502)
 
@@ -404,12 +408,18 @@ async def staff_sign_in(email: str, password: str, client: str = "") -> dict:
     code = six_digits()
     pending = store().add("mfa_tokens", {"id": token("mfa"), "user_id": user["id"], "expires_at": in_seconds(STAFF_CODE_TTL), "tries": 0,
                                          "code_hash": hash_code(code), "resend_at": in_seconds(RESEND_AFTER)})
-    await _email_code_or_fail(user["email"], code, "Your CareLoop sign-in code", _code_email(code, "sign in"))
+    await _email_code_or_fail(user["email"], code, "Your CareLoop sign-in code", _code_email(code, user.get("name"), "sign in"))
     return {"mfa_token": pending["id"], "masked_email": mask_email(user["email"]), "resend_in": RESEND_AFTER}
 
 
-def _code_email(code: str, purpose: str) -> str:
-    return f"{code} is your code to {purpose}. It works for 15 minutes. If you did not ask for it, ignore this email."
+def _code_email(code: str, name: str | None, purpose: str) -> str:
+    """Staff codes by email. Same wording as the mock (frontend/shared/mock-auth.js)."""
+    if purpose == "sign up":
+        lead, other = "Thank you for creating a CareLoop account. Here is your code to confirm your email:", "create a CareLoop account"
+    else:
+        lead, other = "Here is your code to sign in to CareLoop:", "try to sign in"
+    return (f"{greeting(name)}\n\n{lead}\n\n    {code}\n\nIt works for 15 minutes. "
+            f"If you did not {other}, you can ignore this email.\n\nThe CareLoop team")
 
 
 async def resend_staff_code(mfa_token: str) -> dict:
@@ -421,7 +431,7 @@ async def resend_staff_code(mfa_token: str) -> dict:
     code = six_digits()
     pending.update(code_hash=hash_code(code), tries=0, resend_at=in_seconds(RESEND_AFTER))
     user = store().get("staff", pending["user_id"])
-    await _email_code_or_fail(user["email"], code, "Your CareLoop sign-in code", _code_email(code, "sign in"))
+    await _email_code_or_fail(user["email"], code, "Your CareLoop sign-in code", _code_email(code, user.get("name"), "sign in"))
     return {"resend_in": RESEND_AFTER}
 
 
@@ -560,7 +570,7 @@ async def _send_signup_email(signup: dict, code: str) -> None:
                          "Someone tried to create a CareLoop account with this email address, but you already have one. "
                          f"Sign in instead ({app_url('/clinician/#/sign-in')}), or reset your password if you have forgotten it.")
     else:
-        await _email_code_or_fail(signup["email"], code, "Confirm your email for CareLoop", _code_email(code, "confirm your email"))
+        await _email_code_or_fail(signup["email"], code, "Confirm your email for CareLoop", _code_email(code, signup["name"], "sign up"))
 
 
 async def resend_signup_code(signup_token: str) -> dict:

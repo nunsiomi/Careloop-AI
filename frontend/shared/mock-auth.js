@@ -141,7 +141,15 @@ function demoMessage(challenge) {
   if (challenge.via === 'voice') return { channel: 'voice', from: 'Tomi, calling from CareLoop', text: `Hello, this is Tomi from CareLoop. Your sign-in code is ${code.split('').join(' ')}. Again: ${code.split('').join(' ')}.` };
   if (challenge.via === 'sms') return { channel: 'sms', from: 'CareLoop', text: `${code} is your CareLoop sign-in code. It works for 5 minutes. Never share it, not even with your care team.` };
   if (!challenge.email) return null; // unknown number or no email on file: nothing is sent
-  return { channel: 'email', from: `${EMAIL_FROM} <codes@careloop.app>`, text: `Your CareLoop sign-in code is ${code}. It works for 5 minutes. Never share it, not even with your care team.` };
+  return { channel: 'email', from: `${EMAIL_FROM} <codes@careloop.app>`, text: `${greeting(challenge.name)}
+
+Here is your code to sign in to CareLoop:
+
+    ${code}
+
+It works for 5 minutes. Never share it, not even with your care team. If you did not ask for it, you can ignore this email.
+
+The CareLoop team` };
 }
 const challengeView = (challenge) => ({
   challenge_id: challenge.id, masked_phone: maskPhone(challenge.phone_e164), via: challenge.via,
@@ -167,7 +175,7 @@ export const authMock = {
     const holder = pinHolder(e164);
     const email = holder ? (holder.kind === 'caregiver' ? holder.caregiver.email : holder.patient.email) || null : null;
     // Same answer whether or not the number is known, so the form cannot be used to look people up.
-    const challenge = newChallenge({ phone_e164: e164, via, email, show_email: false, purpose: 'sign_in', holder: holder ? { kind: holder.kind, patient_id: holder.patient.id, caregiver_id: holder.caregiver?.id } : null });
+    const challenge = newChallenge({ phone_e164: e164, via, email, show_email: false, purpose: 'sign_in', name: holder ? (holder.caregiver || holder.patient).name : null, holder: holder ? { kind: holder.kind, patient_id: holder.patient.id, caregiver_id: holder.caregiver?.id } : null });
     return ok(challengeView(challenge));
   },
 
@@ -325,7 +333,7 @@ export const authMock = {
     auth.mfa_tokens[mfaToken] = pending;
     // Second step: a 6-digit code sent to the account's email address.
     pending.email_code = sixDigits();
-    return ok({ mfa_token: mfaToken, masked_email: maskEmail(user.email), resend_in: RESEND_AFTER, demo_message: emailCodeMessage(pending.email_code, 'sign in') });
+    return ok({ mfa_token: mfaToken, masked_email: maskEmail(user.email), resend_in: RESEND_AFTER, demo_message: emailCodeMessage(pending.email_code, user.name, 'sign in') });
   },
 
   async resendStaffMfaEmail({ mfa_token }) {
@@ -333,7 +341,8 @@ export const authMock = {
     if (!pending || pending.expires_at < new Date().toISOString()) return fail('Sign-in timed out. Enter your password again.', 410);
     pending.email_code = sixDigits();
     pending.tries = 0;
-    return ok({ resend_in: RESEND_AFTER, demo_message: emailCodeMessage(pending.email_code, 'sign in') });
+    const user = auth.staff.find((item) => item.id === pending.user_id);
+    return ok({ resend_in: RESEND_AFTER, demo_message: emailCodeMessage(pending.email_code, user?.name, 'sign in') });
   },
 
   async verifyStaffMfa({ mfa_token, code, remember_device = false }) {
@@ -428,7 +437,7 @@ export const authMock = {
     const code = sixDigits();
     auth.signups[signupToken] = { name: name.trim(), email: cleanEmail, password, role, facility: facility.name, code, existing, tries: 0, expires_at: inSeconds(900), resend_at: inSeconds(RESEND_AFTER) };
     // Same response whether or not the address already has an account; only the email itself differs.
-    return ok({ signup_token: signupToken, masked_email: maskEmail(cleanEmail), resend_in: RESEND_AFTER, demo_message: existing ? existingAccountMessage() : emailCodeMessage(code, 'confirm your email') });
+    return ok({ signup_token: signupToken, masked_email: maskEmail(cleanEmail), resend_in: RESEND_AFTER, demo_message: existing ? existingAccountMessage() : emailCodeMessage(code, name, 'sign up') });
   },
 
   async resendSignUpCode({ signup_token }) {
@@ -436,7 +445,7 @@ export const authMock = {
     if (!signup || signup.expires_at < new Date().toISOString()) return fail('This sign-up has expired. Start again.', 410);
     if (signup.resend_at > new Date().toISOString()) return fail('Wait a moment before asking for another code.', 429);
     Object.assign(signup, { code: sixDigits(), tries: 0, resend_at: inSeconds(RESEND_AFTER) });
-    return ok({ resend_in: RESEND_AFTER, demo_message: signup.existing ? existingAccountMessage() : emailCodeMessage(signup.code, 'confirm your email') });
+    return ok({ resend_in: RESEND_AFTER, demo_message: signup.existing ? existingAccountMessage() : emailCodeMessage(signup.code, signup.name, 'sign up') });
   },
 
   async verifySignUpEmail({ signup_token, code }) {
@@ -541,8 +550,21 @@ function adminContext() {
   return { session, facility: FACILITIES.find((item) => item.name === user.facility) };
 }
 
-function emailCodeMessage(code, purpose) {
-  return { channel: 'email', from: EMAIL_FROM, text: `${code} is your code to ${purpose}. It works for 15 minutes. If you did not ask for it, ignore this email.` };
+const greeting = (name) => (name?.trim() ? `Hello ${name.trim().split(' ')[0]},` : 'Hello,');
+// Same wording as the backend (_code_email in backend/app/services/identity.py).
+function emailCodeMessage(code, name, purpose) {
+  const [lead, other] = purpose === 'sign up'
+    ? ['Thank you for creating a CareLoop account. Here is your code to confirm your email:', 'create a CareLoop account']
+    : ['Here is your code to sign in to CareLoop:', 'try to sign in'];
+  return { channel: 'email', from: EMAIL_FROM, text: `${greeting(name)}
+
+${lead}
+
+    ${code}
+
+It works for 15 minutes. If you did not ${other}, you can ignore this email.
+
+The CareLoop team` };
 }
 function existingAccountMessage() {
   return { channel: 'email', from: EMAIL_FROM, text: 'Someone tried to create a CareLoop account with this email address, but you already have one. Sign in instead, or reset your password if you have forgotten it.', link: { href: '#/sign-in', label: 'Go to sign in' } };

@@ -134,11 +134,12 @@ async def test_dispatch_retries_temporary_errors_only():
 async def test_sign_in_code_email():
     send = AsyncMock(return_value=SendResult(ok=True))
 
-    await notifications.send_sign_in_code("tola.adeyemi@kestrelmail.ng", "482913", send_mail=send)
+    await notifications.send_sign_in_code("tola.adeyemi@kestrelmail.ng", "482913", "Tola Adeyemi", send_mail=send)
 
     to, subject, text = send.await_args.args
     assert (to, subject) == ("tola.adeyemi@kestrelmail.ng", "Your CareLoop sign-in code")
-    assert "482913" in text and "Never share it" in text
+    assert text.startswith("Hello Tola,\n") and "482913" in text and "Never share it" in text
+    assert notifications.greeting(None) == "Hello,"
 
 
 @pytest.mark.asyncio
