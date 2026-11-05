@@ -45,7 +45,7 @@ export default function Appointments() {
 
           <section aria-labelledby="requests-title" className="stack-4">
             <h2 id="requests-title" className="section-title">Requests to move a visit</h2>
-            <p className="note">The patient keeps their original visit until you pick a new slot. When you do, their old reminder is cancelled and they get a text about the change.</p>
+            <p className="note">The patient keeps their original visit until you pick a new slot. When you do, their old reminder is cancelled and they get a message about the change.</p>
             {!data.requests.length && <p className="empty">No requests waiting.</p>}
             {data.requests.map((request) => <RequestCard key={request.id} request={request} slots={data.slots} onDone={query.reload} />)}
           </section>
@@ -101,7 +101,7 @@ function RequestCard({ request, slots, onDone }) {
     setError(null);
     try {
       await CareLoopAPI.decideReschedule(request.id, { decision, slot_id: decision === 'approve' ? slotId : undefined });
-      toast(decision === 'approve' ? `Visit moved. ${request.patient_name} has been sent a text about the new time.` : 'Original time kept.');
+      toast(decision === 'approve' ? `Visit moved. ${request.patient_name} has been sent a message about the new time.` : 'Original time kept.');
       refreshCounts();
       onDone();
     } catch (requestError) { setError(requestError.message); setBusy(false); }

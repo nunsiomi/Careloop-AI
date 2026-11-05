@@ -1,8 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { CareLoopAPI } from '../shared/api.js';
 import { CHANNELS, CONTACT_WINDOWS, LANGUAGES, READING_LEVELS } from '../shared/languages.js';
+
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 import { BetaChip } from '../shared/ui.jsx';
 import { LogoMark, SafetyFooter } from './parts.jsx';
+import { LegalLinks } from './Legal.jsx';
 import { preferredLanguage } from './Auth.jsx';
 
 const STEPS = ['welcome', 'language', 'reading', 'contact', 'consent'];
@@ -17,6 +20,7 @@ export default function Onboarding({ patient, editing, onDone, onCancel }) {
   const [contactWindow, setContactWindow] = useState(patient.contact_window || CONTACT_WINDOWS[0].id);
   const [pin, setPin] = useState('');
   const [pinConfirm, setPinConfirm] = useState('');
+  const [email, setEmail] = useState('');
   const [agreed, setAgreed] = useState(false);
   const [declined, setDeclined] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -28,11 +32,13 @@ export default function Onboarding({ patient, editing, onDone, onCancel }) {
 
   const needsPin = channels.includes('voice') && !patient.pin_set;
   const pinValid = !needsPin || (/^\d{4}$/.test(pin) && pin === pinConfirm);
+  const needsEmail = channels.includes('email') && !patient.email;
+  const emailValid = !needsEmail || EMAIL_PATTERN.test(email.trim());
   const canContinue = {
     welcome: true,
     language: Boolean(language),
     reading: Boolean(reading),
-    contact: channels.length > 0 && pinValid,
+    contact: channels.length > 0 && pinValid && emailValid,
     consent: agreed
   }[step];
 
@@ -49,7 +55,7 @@ export default function Onboarding({ patient, editing, onDone, onCancel }) {
     try {
       let response = await CareLoopAPI.updateProfile(patient.id, { language, literacy_level: reading, caregiver_mode: reading === 'caregiver' });
       if (!editing) {
-        response = await CareLoopAPI.recordConsent(patient.id, { channels, scope: 'patient_follow_up', version: 'v1', contact_window: contactWindow, pin: needsPin ? pin : undefined });
+        response = await CareLoopAPI.recordConsent(patient.id, { channels, scope: 'patient_follow_up', version: 'v1', contact_window: contactWindow, pin: needsPin ? pin : undefined, email: needsEmail ? email.trim() : undefined });
       }
       onDone(response.patient);
     } catch (requestError) {
@@ -94,12 +100,12 @@ export default function Onboarding({ patient, editing, onDone, onCancel }) {
           <>
             <div className="welcome-orb" aria-hidden="true"><span /></div>
             <h1 id="onboard-title" ref={headingRef} tabIndex={-1} className="onboard-title">Hello, I am Tomi</h1>
-            <p className="onboard-lede">I am here to help you follow the plan your doctors gave you when you left hospital.</p>
+            <p className="onboard-lede">I am here to help you follow the plan your care team gave you.</p>
             <ul className="promise-list">
               <li>I am an AI assistant, not a doctor or a nurse.</li>
               <li>I only repeat what your care team wrote down. I never give new medical advice.</li>
               <li>If something sounds urgent, I tell a real person on your care team straight away.</li>
-              <li>You can talk to me here, type to me, or call me. I can also call you and send you short text reminders.</li>
+              <li>You can talk to me here, type to me, or call me. I can also call you and send you short email reminders.</li>
             </ul>
           </>
         )}
@@ -145,13 +151,16 @@ export default function Onboarding({ patient, editing, onDone, onCancel }) {
             <fieldset className="choice-group">
               <legend className="label">Ways to reach you</legend>
               <div className="choice-list">
-                {CHANNELS.map((option) => (
-                  <label key={option.id} className="choice-card choice-row choice-check">
-                    <input type="checkbox" checked={channels.includes(option.id)} onChange={() => toggleChannel(option.id)} />
-                    <span className="choice-title">{option.title}</span>
-                    <span className="choice-detail">{option.detail}</span>
-                  </label>
-                ))}
+                {CHANNELS.map((option) => {
+                  const off = option.available === false && !channels.includes(option.id);
+                  return (
+                    <label key={option.id} className={`choice-card choice-row choice-check${off ? ' is-disabled' : ''}`}>
+                      <input type="checkbox" checked={channels.includes(option.id)} disabled={off} onChange={() => toggleChannel(option.id)} />
+                      <span className="choice-title">{option.title}</span>
+                      <span className="choice-detail">{off ? option.unavailable : option.detail}</span>
+                    </label>
+                  );
+                })}
               </div>
             </fieldset>
             {(channels.includes('voice') || channels.includes('sms')) && (
@@ -166,6 +175,13 @@ export default function Onboarding({ patient, editing, onDone, onCancel }) {
                   ))}
                 </div>
               </fieldset>
+            )}
+            {needsEmail && (
+              <div className="field">
+                <label htmlFor="consent-email">Your email address</label>
+                <input id="consent-email" className="input input-lg" type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} aria-describedby="consent-email-hint" />
+                <p id="consent-email-hint" className="hint">Reminders go here. They never say what your medicine is for.</p>
+              </div>
             )}
             {needsPin && (
               <div className="pin-box">
@@ -200,6 +216,7 @@ export default function Onboarding({ patient, editing, onDone, onCancel }) {
               <input type="checkbox" checked={agreed} onChange={(event) => setAgreed(event.target.checked)} />
               <span>I agree that CareLoop and Tomi can contact me in these ways about my care plan. Texts and emails will not say what my medicine is for.</span>
             </label>
+            <LegalLinks />
           </>
         )}
 

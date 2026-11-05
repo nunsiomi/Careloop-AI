@@ -26,6 +26,7 @@ Routes follow section 11 of the project documentation v2. Routes marked *(added)
   "phone_e164": "+2348000000101", "email": "string or null",
   "channels": ["web", "voice", "sms", "email"], "contact_window": "08:00-11:00", "pin_set": true,
   "consent_at": "ISO or null", "activation_status": "plan_review | invited | active",
+  "assigned_to": { "id": "u-ada", "name": "Dr. Ada Okafor" } or null,  (added: the lead clinician)
 
   "plan_status": "needs_review | approved | not_created",
   "open_tasks": 2, "overdue_critical": 0, "open_barriers": 1, "open_escalations": 1,
@@ -50,6 +51,13 @@ Routes follow section 11 of the project documentation v2. Routes marked *(added)
 ```
 
 The UI highlights `verifier_issues[].source_text` inside `source_note`, so it must be an exact substring.
+
+Where a plan comes from (backend only; Pydantic models in `backend/app/models.py`): the Care Plan Agent
+(`agents/care_plan.py`) takes `{ source_note, patient: { name } }` and returns
+`{ plan, unresolved: [issue], deliverable, error? }`; the Plan Verifier (`agents/plan_verifier.py`) takes
+`{ source_note, plan, patient }` and returns `{ verdict: "clean | flagged", issues: [issue], deliverable, model_checked }`.
+The orchestrator stores the verifier's `issues` as `verifier_issues`, and must not send the plan to the patient
+while `deliverable` is false or before a clinician approves it. Severity rules: `docs/plan-review-criteria.md`.
 
 ### Task
 
@@ -124,12 +132,14 @@ While `brief_ready` is false, the UI polls every 3 s and shows "Escalation Summa
 
 Patient responses also carry `"failed_messages": 0` and `"next_message": { "channel": "sms", "scheduled_for": "ISO", "title": "Medicine reminder" } or null` *(added)*.
 
-## SMS and email reminders *(doc v2, section 8; routes added)*
+## Email (and later SMS) reminders *(doc v2, section 8; routes added)*
+
+Email is the live channel until CareLoop has an SMS provider (Nunsi, 3 Nov 2026). `sms` stays in every shape so it can return without changes; the backend only uses it once `adapters/sms.py` is set up, and the app hides it while `SMS_AVAILABLE` is false. Backend rules and templates: `backend/app/services/notifications.py`.
 
 Rules the backend scheduler follows, and the UI assumes:
 - Only on channels the patient agreed to (`patient.channels`). Re-check consent at send time; if it was withdrawn, cancel instead of sending.
 - One message 30 minutes before each pending task and one at 18:00 the evening before each visit. Nothing between 21:00 and 07:00; move it to 07:00.
-- Bodies are fixed templates that never name a medicine, condition or test. Nigerian SMS is one-way for the MVP, so every text ends "Do not reply."
+- Bodies are fixed templates that never name a medicine, condition or test. Replies are not read, so every message ends "Do not reply." Emails add a link to the app.
 - Cancel a scheduled reminder when the patient reports the task done, when a visit is moved (then send `visit_moved`), or when the channel is turned off.
 - A delivered text is not proof the patient did anything. Delivery status comes from the provider webhook.
 
@@ -147,7 +157,7 @@ Notification: { "id": "n-1", "patient_id": "p-zainab", "channel": "sms | email",
 | `listMessageTemplates({ patient_id })` | `GET /patients/{id}/message-templates` | | `{ templates: [{ id, title, body }] }` (bodies with the patient's first name filled in) |
 | `sendPatientMessage(body)` | `POST /notifications` | `{ patient_id, channel, template, by }` | `{ notification }`; 403 without consent |
 | `cancelNotification(id, body)` | `POST /notifications/{id}/cancel` | `{ by }` | `{ notification }`; 409 if already sent |
-| `retryNotification(id, body)` | `POST /notifications/{id}/retry` | `{ by }` | `{ notification }` (a new message with `retry_of`) |
+| `retryNotification(id, body)` | `POST /notifications/{id}/retry` | `{ by }` | `{ notification }` (a new message with `retry_of`). 409 unless the message failed and has not been sent again already |
 | `updateConsent(patientId, body)` | `PATCH /patients/{id}/consent` | `{ channels }` | `{ patient }`; logs a `consent_withdrawn` event for anything removed |
 
 ## Sign-in and accounts *(added; section 11 does not cover auth)*
@@ -157,15 +167,18 @@ Error rules: sign-in and reset responses must not reveal whether an account exis
 
 ### Patients and family helpers
 
-- Codes are 6 digits, valid 300 s, resend after 60 s, 5 wrong tries per code. Delivery `via` is `sms` or `voice` (Tomi reads the code out).
+- Codes are 6 digits, valid 300 s, resend after 60 s, 5 wrong tries per code. Delivery `via` is `email` (the default), `sms` (Termii text message) or `voice` (a phone call reads the code out; Termii Voice Call). `sms` and `voice` answer 503 until Termii is configured, and only numbers on an account or an invite are texted or called.
+- Phone sign-in sends the code to the email address on the account and never shows that address (`masked_email` is null), so the screen cannot reveal whether a number has an account. With no email on file nothing is sent; the person can choose a call instead.
+- Invites ask for the person's own `email`; it is saved to the patient or caregiver once the code is verified, and `masked_email` echoes it back.
 - The PIN is 4 digits. It is the same PIN Tomi asks for on phone calls. 5 wrong PINs locks PIN sign-in until a code is used.
 - The app locks after `idle_lock_minutes` (10) without activity.
+- Phone numbers can be from any country. The app sends `phone` as `+<country code> <number as typed>` (for example `+234 0803 123 4567` or `+44 7400 123456`); a number typed without `+` is read as Nigerian. The backend normalises to E.164 and drops a leading trunk `0` after the country code.
 
 ```json
 PatientSession: { "id": "ps_...", "kind": "patient | caregiver", "patient_id": "p-zainab", "user_name": "Hadiza Musa",
   "acting_for_name": "Zainab Musa or null", "relation": "Daughter or null", "phone_e164": "+234...", "pin_set": true,
   "consent_needed": false, "idle_lock_minutes": 10, "expires_at": "ISO" }
-Challenge: { "challenge_id": "ch_...", "masked_phone": "+234 ••• ••• 0101", "via": "sms", "expires_in": 300, "resend_in": 60 }
+Challenge: { "challenge_id": "ch_...", "masked_phone": "+234 ••• ••• 0101", "masked_email": "t••••@example.com or null", "via": "email | voice | sms", "expires_in": 300, "resend_in": 60 }
 Invite: { "code": "CL-7K4Q", "kind": "patient | caregiver", "facility": "string", "invited_by": "string",
   "patient_first_name": "Chidi", "caregiver_name": "string or null", "relation": "string or null", "masked_phone": "string or null" }
 Caregiver: { "id": "cg-1", "patient_id": "p-zainab", "name": "Hadiza Musa", "relation": "Daughter", "masked_phone": "string", "scope": "string", "added_at": "ISO" }
@@ -174,8 +187,8 @@ Caregiver: { "id": "cg-1", "patient_id": "p-zainab", "name": "Hadiza Musa", "rel
 | `CareLoopAPI` method | HTTP | Request body | Response |
 |---|---|---|---|
 | `getPatientSession()` | `GET /auth/patient/session` | | `{ session: PatientSession or null }` |
-| `startPhoneSignIn(body)` | `POST /auth/patient/otp` | `{ phone, via }` | `Challenge` (same answer for unknown numbers) |
-| `startInviteSignIn(code, body)` | `POST /auth/invites/{code}/otp` | `{ via, phone? }` (phone only for caregiver invites) | `Challenge` |
+| `startPhoneSignIn(body)` | `POST /auth/patient/otp` | `{ phone, via }` (`via` defaults to `email`) | `Challenge` (same answer for unknown numbers) |
+| `startInviteSignIn(code, body)` | `POST /auth/invites/{code}/otp` | `{ via, email?, phone? }` (email when `via` is `email`; phone only for caregiver invites) | `Challenge` |
 | `resendCode(id, body)` | `POST /auth/patient/otp/{id}/resend` | `{ via }` | `Challenge`; 429 before `resend_in` |
 | `verifyCode({ challenge_id, code })` | `POST /auth/patient/otp/{id}/verify` | `{ code }` | `{ session }`; 401 wrong, 410 expired, 404 number not linked |
 | `signInWithPin(body)` | `POST /auth/patient/pin-sign-in` | `{ phone_e164, pin }` | `{ session }`; 401 with `locked` |
@@ -189,13 +202,13 @@ Caregiver: { "id": "cg-1", "patient_id": "p-zainab", "name": "Hadiza Musa", "rel
 ### Care team
 
 - Password: at least 12 characters, no composition rules, block common and breached passwords and the user's email (NIST SP 800-63B). Lock for a short time after 5 failures.
-- Every sign-in needs a second step: a 6-digit code emailed to the account's address (15 minutes, 5 tries, resend after 60 s). There are no authenticator apps or backup codes. Someone who loses their email asks their hospital's CareLoop admin to change it. Staff sessions last 12 h and the page locks after 15 idle minutes.
-- Staff join two ways: an invite link from a colleague, or self sign-up with any email address (personal addresses are allowed), a hospital from `GET /facilities` and that hospital's join code. The hospital's CareLoop admin hands the code to their own staff and can change it at any time. Without the right code for the chosen hospital, no account is created (403 with `field: "join_code"`). After 5 wrong codes, sign-up is blocked for 10 minutes (429). Join codes are never sent to the browser. Sign-up then confirms the email with a 6-digit code and signs the person in. If the address already has an account, the response is the same and the email tells the owner to sign in instead.
-- Production: rate-limit join-code attempts per IP address and per hospital, log each sign-up for the hospital admin, and let the admin remove an account.
-- Each staff user sees only patients at their own hospital. The mock keeps one set of sample patients and moves them to the signed-in user's hospital.
+- Every sign-in needs a second step: a 6-digit code emailed to the account's address (15 minutes, 5 tries, resend after 60 s). There are no authenticator apps or backup codes. Someone who loses their email asks their facility's CareLoop admin to change it. Staff sessions last 12 h and the page locks after 15 idle minutes.
+- Staff join two ways: an invite link from a colleague, or self sign-up with any email address (personal addresses are allowed), a care facility from `GET /facilities` (a hospital, pharmacy, clinic or care home; the person picks the type first, then the facility) and that facility's join code. The facility's CareLoop admin hands the code to their own staff and can change it at any time. Without the right code for the chosen facility, no account is created (403 with `field: "join_code"`). After 5 wrong codes, sign-up is blocked for 10 minutes (429). Join codes are never sent to the browser. Sign-up then confirms the email with a 6-digit code and signs the person in. If the address already has an account, the response is the same and the email tells the owner to sign in instead.
+- Production: rate-limit join-code attempts per IP address and per facility, log each sign-up for the facility admin, and let the admin remove an account.
+- Each staff user sees only patients at their own care facility. The mock keeps one set of sample patients and moves them to the signed-in user's facility.
 
 ```json
-StaffSession: { "id": "ss_...", "user": { "id": "u-ada", "name": "Dr. Ada Okafor", "email": "string", "role": "string", "facility": "string", "initials": "AO" },
+StaffSession: { "id": "ss_...", "user": { "id": "u-ada", "name": "Dr. Ada Okafor", "email": "string", "role": "string", "facility": "string", "initials": "AO", "is_admin": true },
   "remember_device": false, "idle_lock_minutes": 15, "expires_at": "ISO" }
 ```
 
@@ -205,7 +218,7 @@ StaffSession: { "id": "ss_...", "user": { "id": "u-ada", "name": "Dr. Ada Okafor
 | `staffSignIn(body)` | `POST /auth/staff/sign-in` | `{ email, password }` | `{ mfa_token, masked_email, resend_in }` and emails a code; 401 generic message, 429 locked |
 | `resendStaffMfaEmail(body)` | `POST /auth/staff/mfa/email` | `{ mfa_token }` | `{ resend_in }` |
 | `verifyStaffMfa(body)` | `POST /auth/staff/mfa` | `{ mfa_token, code, remember_device }` | `{ session }`; 401 wrong code, 410 timed out, 429 too many |
-| `listFacilities()` | `GET /facilities` | | `{ facilities: [{ id, name, city }], roles: string[] }`. The mock adds `demo_join_code` to each hospital for the MVP notice on sign-up; the real backend must never return it. |
+| `listFacilities()` | `GET /facilities` | | `{ types: [{ id, label }], facilities: [{ id, type, name, city, country }], roles: string[] }`. `type` is one of `hospital`, `pharmacy`, `clinic`, `care_home`. The mock adds `demo_join_code` to each facility for the MVP notice on sign-up; the real backend must never return it. |
 | `staffSignUp(body)` | `POST /auth/staff/sign-up` | `{ name, email, password, facility_id, join_code, role, confirmed }` | `{ signup_token, masked_email, resend_in }` and emails a 6-digit code; 403 wrong join code, 429 too many |
 | `resendSignUpCode(body)` | `POST /auth/staff/sign-up/resend` | `{ signup_token }` | `{ resend_in }`; 429 too soon |
 | `verifySignUpEmail(body)` | `POST /auth/staff/sign-up/verify` | `{ signup_token, code }` | `{ session }`; 401 wrong code, 410 expired |
@@ -226,6 +239,11 @@ The mock adds `demo_code` to challenges, `demo_link` to reset responses and `dem
 | `CareLoopAPI` method | HTTP | Request body | Response |
 |---|---|---|---|
 | `getSupportInfo()` | `GET /support` *(added)* | | `{ tomi_number, emergency_number, emergency_text }` |
+| `listStaff()` | `GET /staff` *(added)* | | `{ staff: [{ id, name, role }] }`, the care team at your facility |
+| `assignPatient(id, body)` | `PATCH /patients/{id}/assignment` *(added)* | `{ staff_id or null }` | `{ patient }`; logged on the timeline |
+| `getAdminFacility()` | `GET /admin/facility` *(added; admin only)* | | `{ facility: { id, type, name, city, country, join_code }, staff: [{ id, name, email, role, is_admin, joined_at, last_seen_at }] }` (newest first); 403 for non-admins |
+| `newJoinCode()` | `POST /admin/join-code` *(added; admin only)* | | `{ join_code }`; the old code stops working |
+| `removeStaff(id)` | `DELETE /admin/staff/{id}` *(added; admin only)* | | `{ ok }`; signs them out everywhere and unassigns their patients; 409 for yourself |
 | `listPatients()` | `GET /patients` | | `{ patients: Patient[] }` |
 | `getPatient(id)` | `GET /patients/{id}` | | `{ patient }` |
 | `createPatient(body)` | `POST /patients` | `{ name, phone_e164, email, language, literacy_level, caregiver_mode }` | `{ patient }` |
@@ -236,7 +254,7 @@ The mock adds `demo_code` to challenges, `demo_link` to reset responses and `dem
 | `updatePlan(planId, body)` | `PATCH /plans/{planId}` *(added)* | edited Plan fields | `{ plan }` |
 | `approvePlan(planId, body)` | `POST /plans/{planId}/approve` | `{ override_issues }` | `{ plan }` |
 | `getMessages(id)` | `GET /patients/{id}/messages` | | `{ messages[] }` |
-| `sendMessage(id, body)` | `POST /patients/{id}/messages` | `{ original_text, language, task_id?, quick_reply? }` | `{ reply, barrier, escalation, reschedule }` |
+| `sendMessage(id, body)` | `POST /patients/{id}/messages` | `{ original_text, language, task_id?, quick_reply? }` | `{ reply, barrier, escalation, reschedule }`. `reply.original_text` is in the patient's language when the Language Agent's checks pass, with `english_text`, `language`, `number_check_passed` and `uncertainty_flags`; otherwise English with `number_check_passed: false` |
 | `listEvents({ patient_id, limit })` | `GET /patients/{id}/events`, or `GET /events` *(added)* for the feed across all patients | | `{ events: CareEvent[] }`, newest first |
 | `listAppointments(filters)` | `GET /appointments?patient_id=` | | `{ appointments[] }` |
 | `listSlots()` | `GET /clinic-slots` *(added)* | | `{ slots[] }` (future slots) |
@@ -253,14 +271,38 @@ The mock adds `demo_code` to challenges, `demo_link` to reset responses and `dem
 | `sendVoiceInput(id, body)` | `POST /voice/sessions/{id}/input` *(added; mock only)* | `{ transcript?, confidence?, digit?, pin? }` | `{ turns[], state, keypad[], ended, pin_required?, escalation?, barrier? }` |
 | `endVoiceSession(id)` | `POST /voice/sessions/{id}/end` *(added)* | | `{ ok }` |
 | `listEscalations(filters)` | `GET /escalations?status=open` | `open` means any status except resolved | `{ escalations[] }` |
-| `acknowledgeEscalation(id, body)` | `POST /escalations/{id}/acknowledge` | `{ by }` | `{ escalation }` |
+| `acknowledgeEscalation(id, body)` | `POST /escalations/{id}/acknowledge` | `{ by }` | `{ escalation }`; no change if it is already acknowledged or resolved |
 | `resolveEscalation(id, body)` | `POST /escalations/{id}/resolve` | `{ note, by }` | `{ escalation }` |
 
 ## Browser voice (Tomi)
 
-In the real system, `createVoiceSession` returns a short-lived LiveKit token. The browser joins the room, and the Tomi worker (`voice/tomi_agent.py`) handles audio, Spitch speech-to-text and text-to-speech, turn-taking and the PIN check. Turns reach the backend as normalized voice events (doc section 22.2).
+In the real system, `createVoiceSession` returns a short-lived LiveKit token. The browser joins the room, and the Tomi worker (`voice/tomi_agent.py`) handles audio, Spitch speech-to-text and text-to-speech, and turn-taking. The patient is already signed in, so browser voice has no PIN check (phone calls do). Turns reach the backend as normalized voice events (doc section 22.2).
 
-The mock replaces all of that with `sendVoiceInput`, a scripted dialog driven by keypad presses and demo phrases. The voice sheet shows "Voice is not available yet" for any session whose `mode` is not `mock`. Connecting `livekit-client` is the next step on the voice side (Nunsi).
+Until the backend exists, `frontend/api/voice/sessions.js` issues that token: a Vercel function on the preview, served by Vite during `npm run dev`. It needs `LIVEKIT_URL`, `LIVEKIT_API_KEY` and `LIVEKIT_API_SECRET` (root `.env` locally, Vercel project settings on the preview) and answers `503` without them. The token asks LiveKit to dispatch the agent `tomi` with job metadata `{ "patient_id", "language" }`. Body: `{ patient_id, language }`. Response: `{ session: { id, mode: "livekit", url, token, language } }`. The backend's own `POST /voice/sessions` issues the same token after checking the patient's session; this stand-in does not.
+
+With mocks on, `createVoiceSession` tries that route first and falls back to the scripted mock session if it is not set up (`?voice=mock` forces the script). The voice sheet then joins the room through `shared/live-voice.js` (`livekit-client`): microphone in, Tomi's audio out, captions from the `lk.transcription` text stream, Tomi's state from the agent's `lk.agent.state` attribute, and the emergency button when the agent sets `careloop.escalation` to `open`.
+
+The scripted mock session uses `sendVoiceInput`, a dialog driven by keypad presses and demo phrases.
+
+## Voice worker *(added; used by `voice/tomi_agent.py`, not by the browser)*
+
+The Tomi worker calls these with `Authorization: Bearer <VOICE_SERVICE_TOKEN>`, a service token that can only
+use these routes (built in `backend/app/routes/voice.py`). Set `VOICE_USE_MOCKS=0` to use them; with `1` the worker
+runs on its own mock (`voice/backend_client.py`).
+Outgoing calls: `POST /calls/outbound` dispatches the LiveKit agent `tomi` with job metadata
+`{ "call_id", "patient_id", "phone_e164" }`. Browser voice tokens carry the participant attribute `careloop.patient_id`.
+
+| Route | Request body | Response |
+|---|---|---|
+| `POST /voice/calls` | `{ direction, phone_e164?, patient_id? }` | `{ call: { id, language } }`; `language` is set only for outbound calls |
+| `POST /voice/calls/{id}/verify-pin` | `{ phone_e164, pin }` | `{ ok: true, patient_id }` or `{ ok: false, tries_left }`. The same answer for an unknown number and a wrong PIN; shares the app's 5-try lock |
+| `GET /voice/calls/{id}/context` | | `{ context: { patient: { id, first_name, language, timezone }, consent: { voice }, facility, plan, tasks[], opening } }`; 403 until the PIN is verified. `plan` is the approved plan only. `opening` is an approved line in the patient's language, or null |
+| `POST /voice/calls/{id}/turns/check` | `{ text, language, confidence? }` | `{ action: "continue" }`, `{ action: "clarify" }` (unclear speech: ask again) or `{ action: "escalate", escalation }`. Runs the safety rules; an escalation is opened before it answers. The worker sends `confidence: 0.4` for a transcript it judges unclear (Spitch gives no score) |
+| `POST /voice/calls/{id}/turns` | `{ speaker: "tomi" \| "patient", transcript, language }` | `{}`; text only, no audio |
+| `POST /voice/calls/{id}/task-updates` | `{ task_id, status: "done" \| "not_done" \| "unable", original_text }` | `{ ok }`; recorded as `patient_reported` after the patient confirmed it |
+| `POST /voice/calls/{id}/barriers` | `{ type: "cost" \| "transport" \| "distance" \| "stock" \| "no_helper" \| "other", original_text, task_id? }` | `{ ok }` |
+| `POST /voice/calls/{id}/questions` | `{ original_text }` | `{ ok }`; shows on the dashboard for the care team |
+| `POST /voice/calls/{id}/end` | `{ outcome: "completed" \| "escalated" \| "unverified" \| "not_reached", states[] }` | `{}` |
 
 ## Demo-only endpoints
 

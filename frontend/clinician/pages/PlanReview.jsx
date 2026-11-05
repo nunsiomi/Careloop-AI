@@ -61,7 +61,7 @@ export default function PlanReview() {
     try {
       if (editing) await CareLoopAPI.updatePlan(plan.id, draft);
       await CareLoopAPI.approvePlan(plan.id, { override_issues: issues.length > 0 });
-      toast(patient.consent_at ? 'Plan approved. Tomi will use it from now on.' : 'Plan approved. We will text the patient an invite; reminders start once they sign up.');
+      toast(patient.consent_at ? 'Plan approved. Tomi will use it from now on.' : 'Plan approved. We will email the patient an invite; reminders start once they sign up.');
       refreshCounts();
       navigate(`/patients/${patient.id}`);
     } catch (requestError) {

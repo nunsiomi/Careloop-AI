@@ -1,1 +1,30 @@
-[]
+{
+  "_about": "Approved resources for the Barrier Resolution Agent (project documentation, sections 5 and 10). Every name and phone number is invented. The agent may only offer what is listed here, and never promises stock, cost or availability: each note says so. type matches the barrier types in docs/api_shapes.md (cost, transport, stock, understanding).",
+  "resources": [
+    {
+      "id": "r-allen-pharmacy", "facility": "Kestrel General Hospital", "type": "stock",
+      "name": "Allen Junction Pharmacy", "kind": "Pharmacy", "area": "About 2 km from the hospital",
+      "phone_e164": "+2348000000555", "note": "Stock is not guaranteed. Call before you go."
+    },
+    {
+      "id": "r-wuse-pharmacy", "facility": "Kestrel General Hospital", "type": "stock",
+      "name": "Wuse Market Pharmacy", "kind": "Pharmacy", "area": "About 5 km from the hospital",
+      "phone_e164": "+2348000000559", "note": "Stock is not guaranteed. Call before you go."
+    },
+    {
+      "id": "r-support-desk", "facility": "Kestrel General Hospital", "type": "cost",
+      "name": "Kestrel Patient Support Desk", "kind": "Payment help", "area": "At the clinic",
+      "phone_e164": "+2348000000556", "note": "Ask about payment plans for prescribed medicine. Help is not guaranteed."
+    },
+    {
+      "id": "r-ride-scheme", "facility": "Kestrel General Hospital", "type": "transport",
+      "name": "Kestrel Ride to Clinic scheme", "kind": "Transport help", "area": "Phone only",
+      "phone_e164": "+2348000000557", "note": "May help with travel to clinic visits. Not guaranteed."
+    },
+    {
+      "id": "r-care-team", "facility": "Kestrel General Hospital", "type": "understanding",
+      "name": "Your care team", "kind": "Care team", "area": "Kestrel General Hospital",
+      "phone_e164": "+2348000000558", "note": "Ask them to explain your plan again."
+    }
+  ]
+}

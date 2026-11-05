@@ -1,1 +1,42 @@
-[]
+{
+  "_about": "Synthetic patients for the MVP database seed. Every person, phone number, email and facility is invented; they match the frontend mock (frontend/shared/mock-server.js) so the app looks the same on mock and real data. discharge_note is a file in data/sample_discharges/. Phone numbers use the reserved-looking +234 800 000 range and reach no one.",
+  "facility": { "name": "Kestrel General Hospital", "type": "hospital", "city": "Abuja", "country": "NG" },
+  "patients": [
+    {
+      "id": "p-zainab", "name": "Zainab Musa", "age": 58, "language": "ha", "literacy_level": "basic",
+      "caregiver_mode": true,
+      "caregiver": { "name": "Hadiza Musa", "relation": "Daughter", "scope": "Reminders and help with tasks" },
+      "contact": { "phone_e164": "+2348000000101", "email": null, "contact_window": "08:00-11:00" },
+      "channels": ["web", "voice", "sms"], "pin": "1234",
+      "activation_status": "plan_review", "discharge_note": "zainab-musa.txt"
+    },
+    {
+      "id": "p-tola", "name": "Tola Adeyemi", "age": 44, "language": "yo", "literacy_level": "standard",
+      "caregiver_mode": false, "caregiver": null,
+      "contact": { "phone_e164": "+2348000000102", "email": "tola.adeyemi@kestrelmail.ng", "contact_window": "16:00-19:00" },
+      "channels": ["web", "email", "voice"], "pin": "1234",
+      "activation_status": "plan_review", "discharge_note": "tola-adeyemi.txt"
+    },
+    {
+      "id": "p-chidi", "name": "Chidi Okeke", "age": 63, "language": "ig", "literacy_level": "standard",
+      "caregiver_mode": false, "caregiver": null,
+      "contact": { "phone_e164": "+2348000000103", "email": null, "contact_window": null },
+      "channels": [], "pin": null,
+      "activation_status": "plan_review", "discharge_note": "chidi-okeke.txt"
+    },
+    {
+      "id": "p-grace", "name": "Grace Bassey", "age": 51, "language": "en", "literacy_level": "standard",
+      "caregiver_mode": false, "caregiver": null,
+      "contact": { "phone_e164": "+2348000000104", "email": "grace.bassey@kestrelmail.ng", "contact_window": null },
+      "channels": [], "pin": null,
+      "activation_status": "plan_review", "discharge_note": "grace-bassey.txt"
+    },
+    {
+      "id": "p-ibrahim", "name": "Ibrahim Danjuma", "age": 37, "language": "ha", "literacy_level": "basic",
+      "caregiver_mode": false, "caregiver": null,
+      "contact": { "phone_e164": "+2348000000105", "email": null, "contact_window": null },
+      "channels": [], "pin": null,
+      "activation_status": "plan_review", "discharge_note": "ibrahim-danjuma.txt"
+    }
+  ]
+}

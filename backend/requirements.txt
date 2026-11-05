@@ -1,0 +1,11 @@
+# What the FastAPI backend needs on a server (the root requirements.txt adds the voice worker and tests).
+fastapi
+uvicorn[standard]
+pydantic>=2
+apscheduler
+sqlalchemy>=2
+psycopg[binary]
+groq
+httpx
+python-dotenv
+tzdata

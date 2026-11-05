@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { LegalLinks } from './Legal.jsx';
 import { KeyRound, LogOut, Mail, MessageCircle, MessageSquareText, Phone, UserMinus, UserPlus } from 'lucide-react';
 import { CareLoopAPI } from '../shared/api.js';
 import { PhoneField } from '../shared/auth-ui.jsx';
@@ -49,6 +50,12 @@ export default function AccountScreen({ session, patient, headingRef, onSignOut,
         </div>
       </section>
 
+      <section className="settings-group" aria-labelledby="set-legal">
+        <h2 id="set-legal" className="sheet-title">Your information</h2>
+        <p className="hint">You can ask your care team to show you, correct or delete what CareLoop keeps about you.</p>
+        <LegalLinks />
+      </section>
+
       {confirmForget && (
         <Modal title="Forget this phone?" onClose={() => setConfirmForget(false)}>
           <p>Use this if the phone is shared or not yours. Next time, CareLoop will send a new code to sign in instead of asking for your PIN.</p>
@@ -91,17 +98,18 @@ function ContactChoices({ patient, helper, onPatientChange }) {
           const Icon = CHANNEL_ICON[channel.id];
           const on = patient.channels.includes(channel.id);
           const noEmail = channel.id === 'email' && !patient.email;
+          const unavailable = channel.available === false && !on;
           return (
             <li key={channel.id}>
               <Icon aria-hidden="true" size={22} />
               <span className="channel-switch-text" id={`ch-${channel.id}`}>
                 <strong>{channel.title}</strong>
-                <span>{noEmail ? 'Ask your care team to add an email address first.' : channel.detail}</span>
+                <span>{noEmail ? 'Ask your care team to add an email address first.' : unavailable ? channel.unavailable : channel.detail}</span>
               </span>
               {channel.id === 'web'
                 ? <span className="switch-note">Always on</span>
                 : (
-                  <button type="button" role="switch" className="switch" aria-checked={on} aria-labelledby={`ch-${channel.id}`} disabled={helper || noEmail || busy === channel.id} onClick={() => toggle(channel)}>
+                  <button type="button" role="switch" className="switch" aria-checked={on} aria-labelledby={`ch-${channel.id}`} disabled={helper || noEmail || unavailable || busy === channel.id} onClick={() => toggle(channel)}>
                     <span className="switch-knob" aria-hidden="true" />
                     <span className="switch-label" aria-hidden="true">{on ? 'On' : 'Off'}</span>
                   </button>
@@ -201,6 +209,7 @@ function InviteHelperDialog({ patient, onClose, onDone }) {
   const [name, setName] = useState('');
   const [relation, setRelation] = useState(RELATIONS[0]);
   const [phone, setPhone] = useState('');
+  const [email, setEmail] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const [sent, setSent] = useState(null);
@@ -211,7 +220,7 @@ function InviteHelperDialog({ patient, onClose, onDone }) {
     setBusy(true);
     setError(null);
     try {
-      const { invite } = await CareLoopAPI.inviteCaregiver(patient.id, { name, relation, phone });
+      const { invite } = await CareLoopAPI.inviteCaregiver(patient.id, { name, relation, phone, email });
       setSent(invite);
       toast(`Invite sent to ${invite.name}.`);
     } catch (requestError) { setError(requestError.message); }
@@ -221,7 +230,7 @@ function InviteHelperDialog({ patient, onClose, onDone }) {
   if (sent) {
     return (
       <Modal title="Invite sent" onClose={onDone}>
-        <p>{sent.name} will get a text message with a link and the code <strong>{sent.code}</strong>. The code works once.</p>
+        <p>{sent.name} will get an email with a link and the code <strong>{sent.code}</strong>. You can also tell them the code yourself. It works once.</p>
         <div className="modal-actions"><button type="button" className="btn btn-primary" onClick={onDone}>Done</button></div>
       </Modal>
     );
@@ -241,6 +250,11 @@ function InviteHelperDialog({ patient, onClose, onDone }) {
           </select>
         </div>
         <PhoneField id="helper-phone-new" label="Their phone number" value={phone} onChange={setPhone} invalid={Boolean(error)} describedBy={error ? 'helper-error' : undefined} />
+        <div className="field">
+          <label htmlFor="helper-email">Their email address</label>
+          <input id="helper-email" className="input input-lg" type="email" autoComplete="off" value={email} onChange={(event) => setEmail(event.target.value)} aria-describedby="helper-email-hint" />
+          <p id="helper-email-hint" className="hint">We email them the invite and their sign-in codes.</p>
+        </div>
         {error && <p id="helper-error" className="field-error" role="alert">{error}</p>}
         <div className="modal-actions">
           <button type="button" className="btn btn-quiet" onClick={onClose}>Cancel</button>

@@ -124,6 +124,8 @@ code { padding: 1px var(--space-1); border-radius: var(--radius-sm); background:
 .profile-facts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-4) var(--space-6); margin: 0; padding: var(--space-5); border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--white); }
 .profile-facts dt { margin-bottom: var(--space-1); color: var(--ink-600); font-size: var(--text-sm); }
 .profile-facts dd { margin: 0; font-weight: 600; overflow-wrap: anywhere; }
+.lead-picker { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; font-weight: 400; }
+.lead-picker .select { min-width: 12rem; }
 .tabs { display: flex; gap: var(--space-1); overflow-x: auto; border-bottom: 1px solid var(--line); }
 .tab { min-height: var(--tap); padding: var(--space-2) var(--space-4); border: 0; border-bottom: 3px solid transparent; background: transparent; color: var(--ink-600); font-weight: 600; white-space: nowrap; }
 .tab[aria-selected='true'] { border-bottom-color: var(--purple-700); color: var(--ink-900); }
@@ -402,13 +404,19 @@ code { padding: 1px var(--space-1); border-radius: var(--radius-sm); background:
 .session-list li > span:nth-child(2) { display: inline-flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
 .session-list svg { color: var(--purple-600); }
 
+/* ---------- facility admin ---------- */
+
+.admin-grid { display: grid; grid-template-columns: minmax(16rem, 1fr) minmax(0, 3fr); gap: var(--space-5); align-items: start; }
+.join-code { margin: 0; font-family: var(--font-display); font-size: var(--text-2xl); font-weight: 700; letter-spacing: 0.08em; color: var(--purple-700); }
+.admin-team .table td { vertical-align: middle; }
+
 @media (max-width: 900px) {
   .dash-foot { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin: 0 0 0 auto; }
   .dash-user { min-height: var(--tap-min); padding: var(--space-1); background: transparent; }
   .dash-user-text, .dash-user-icon { display: none; }
   .dash-signout { padding: 0 var(--space-2); }
   .dash-demo-group { display: none; }
-  .account-grid { grid-template-columns: 1fr; }
+  .account-grid, .admin-grid { grid-template-columns: 1fr; }
   .staff-auth { grid-template-columns: 1fr; }
   .staff-auth-side { min-height: 0; padding: var(--space-4) var(--space-5); }
   .staff-auth-side .loop-art, .staff-week, .staff-auth-foot { display: none; }
@@ -498,7 +506,7 @@ code { padding: 1px var(--space-1); border-radius: var(--radius-sm); background:
   .assistant-launcher { right: var(--space-4); bottom: var(--space-4); }
 }
 
-/* MVP only: the selected hospital's join code, shown so anyone can try sign-up. */
+/* MVP only: the selected facility's join code, shown so anyone can try sign-up. */
 .mvp-code { display: flex; gap: var(--space-3); padding: var(--space-4); border: 1.5px dashed var(--purple-300); border-radius: var(--radius-md); background: var(--purple-100); color: var(--ink-700); font-size: var(--text-sm); }
 .mvp-code > svg { flex: 0 0 auto; color: var(--purple-700); }
 .mvp-code > div { display: grid; gap: var(--space-2); justify-items: start; }

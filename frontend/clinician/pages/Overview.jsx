@@ -46,7 +46,7 @@ function buildQueue(data) {
     id: barrier.id, rank: 5, tone: 'neutral', icon: PackageX, title: `Barrier (${barrier.type}): ${barrier.patient_name}`, detail: `Opened ${relativeTime(barrier.opened_at)}, ${barrier.attempts} option${barrier.attempts === 1 ? '' : 's'} offered`, to: `/patients/${barrier.patient_id}`, action: 'View patient'
   }));
   data.failed.forEach((message) => items.push({
-    id: message.id, rank: 4, tone: 'amber', icon: MessageSquareWarning, title: `Text not delivered: ${message.patient_name}`, detail: message.failure_reason || 'The provider could not deliver it.', to: '/reminders?show=problem', action: 'Send again'
+    id: message.id, rank: 4, tone: 'amber', icon: MessageSquareWarning, title: `${message.channel === 'sms' ? 'Text' : 'Email'} not delivered: ${message.patient_name}`, detail: message.failure_reason || 'The provider could not deliver it.', to: '/reminders?show=problem', action: 'Send again'
   }));
   return items.sort((first, second) => first.rank - second.rank);
 }

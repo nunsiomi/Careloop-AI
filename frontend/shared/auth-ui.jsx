@@ -1,6 +1,7 @@
 import { useEffect, useId, useState } from 'react';
-import { Delete, Eye, EyeOff, Mail, MessageSquareText, PhoneCall, X } from 'lucide-react';
+import { ChevronDown, Delete, Eye, EyeOff, Mail, MessageSquareText, PhoneCall, X } from 'lucide-react';
 import { USE_MOCKS } from './api.js';
+import { PHONE_COUNTRIES } from './format.js';
 import { PRESENTER } from './presenter.js';
 
 /* One input for the whole code, so screen readers and SMS autofill see a single field.
@@ -93,13 +94,26 @@ export function PasswordField({ id, label, value, onChange, autoComplete = 'curr
   );
 }
 
+/* Country picker plus the number. The value is "+<dial> <number as typed>", or the typed text as-is when it
+   starts with +, so numbers from countries not in the list still work. */
 export function PhoneField({ id, label, value, onChange, describedBy, invalid = false, autoFocus = false }) {
+  const [countryId, setCountryId] = useState(PHONE_COUNTRIES[0].id);
+  const country = PHONE_COUNTRIES.find((item) => item.id === countryId);
+  const prefix = `+${country.dial} `;
+  const national = value.startsWith(prefix) ? value.slice(prefix.length) : value;
+  const emit = (text, next = country) => onChange(!text ? '' : text.trim().startsWith('+') ? text : `+${next.dial} ${text}`);
   return (
     <div className="field">
       <label htmlFor={id}>{label}</label>
       <div className="phone-field">
-        <span className="phone-prefix" aria-hidden="true">+234</span>
-        <input id={id} className="input input-lg" type="tel" inputMode="tel" autoComplete="tel-national" placeholder="0803 123 4567" value={value} onChange={(event) => onChange(event.target.value.replace(/[^\d\s+]/g, '').slice(0, 16))} aria-describedby={describedBy} aria-invalid={invalid || undefined} autoFocus={autoFocus} />
+        <span className="phone-prefix">
+          <span aria-hidden="true">+{country.dial}</span>
+          <ChevronDown aria-hidden="true" size={16} />
+          <select aria-label="Country" value={countryId} onChange={(event) => { const next = PHONE_COUNTRIES.find((item) => item.id === event.target.value); setCountryId(next.id); emit(national, next); }}>
+            {PHONE_COUNTRIES.map((item) => <option key={item.id} value={item.id}>{item.name} (+{item.dial})</option>)}
+          </select>
+        </span>
+        <input id={id} className="input input-lg" type="tel" inputMode="tel" autoComplete="tel-national" placeholder={country.example} value={national} onChange={(event) => emit(event.target.value.replace(/[^\d\s+]/g, '').slice(0, 18))} aria-describedby={describedBy} aria-invalid={invalid || undefined} autoFocus={autoFocus} />
       </div>
     </div>
   );

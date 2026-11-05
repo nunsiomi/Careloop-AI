@@ -25,7 +25,7 @@ export default function Reminders() {
   return (
     <div className="page">
       <PageHeader title="Reminders" sub="Text messages and emails to patients. They are short and generic: they never name a medicine or an illness, and replies are not read.">
-        <button type="button" className="btn btn-primary" onClick={() => setSending(true)}><MessageSquareText aria-hidden="true" size={18} />Send a text</button>
+        <button type="button" className="btn btn-primary" onClick={() => setSending(true)}><MessageSquareText aria-hidden="true" size={18} />Send a message</button>
       </PageHeader>
 
       <div className="filter-row" role="group" aria-label="Show">

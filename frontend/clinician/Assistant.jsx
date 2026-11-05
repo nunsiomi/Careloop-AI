@@ -163,7 +163,7 @@ export function AssistantPanel({ onClose, routePatientId }) {
             <ul>
               {STARTERS.map((starter) => <li key={starter}><button type="button" className="assistant-starter" onClick={() => { setText(starter); inputRef.current?.focus(); }}>{starter}</button></li>)}
             </ul>
-            <p className="hint">It can add medicine and test reminders, book visits, send a text, ask Tomi to call, or write a note on the timeline.</p>
+            <p className="hint">It can add medicine and test reminders, book visits, send an email reminder, ask Tomi to call, or write a note on the timeline.</p>
           </div>
         )}
         {turns.map((turn) => (
@@ -292,7 +292,7 @@ function ActionCard({ action, draft, onEdit, onRemove }) {
       {!action.blocked && action.kind === 'send_text' && (
         <div className="assistant-fields">
           <div className="field span-2">
-            <label htmlFor={field('template')}>Which text</label>
+            <label htmlFor={field('template')}>Which message</label>
             <select id={field('template')} className="select" value={action.template} onChange={(event) => onEdit({ template: event.target.value })}>
               {draft.templates.map((template) => <option key={template.id} value={template.id}>{template.title}</option>)}
             </select>

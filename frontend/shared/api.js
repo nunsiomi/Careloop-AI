@@ -1,10 +1,12 @@
 // The only module that talks to the network. Pages and components import CareLoopAPI and never call fetch.
 // Routes follow the proposed contract in docs/api_shapes.md (project documentation v2, section 11). Confirm shapes with Olamide.
 // USE_MOCKS is on by default; add ?mock=0 to a page URL to call the FastAPI backend instead.
+// A build made with VITE_USE_MOCKS=0 (the Railway image) uses the backend by default; ?mock=1 brings the mocks back.
 import { mock } from './mock-server.js';
 import { authMock } from './mock-auth.js';
 
-export const USE_MOCKS = new URLSearchParams(window.location.search).get('mock') !== '0';
+const MOCK_PARAM = new URLSearchParams(window.location.search).get('mock');
+export const USE_MOCKS = MOCK_PARAM === null ? import.meta.env.VITE_USE_MOCKS !== '0' : MOCK_PARAM !== '0';
 const BASE_URL = '/api';
 
 async function request(path, { method = 'GET', body } = {}) {
@@ -71,6 +73,12 @@ const http = {
   listStaffSessions: () => request('/auth/staff/sessions'),
   staffSignOut: (body) => request('/auth/staff/sign-out', { method: 'POST', body }),
 
+  listStaff: () => request('/staff'),
+  assignPatient: (patientId, body) => request(`/patients/${id(patientId)}/assignment`, { method: 'PATCH', body }),
+  getAdminFacility: () => request('/admin/facility'),
+  newJoinCode: () => request('/admin/join-code', { method: 'POST' }),
+  removeStaff: (staffId) => request(`/admin/staff/${id(staffId)}`, { method: 'DELETE' }),
+
   getSupportInfo: () => request('/support'),
   listSampleNotes: () => request('/demo/sample-notes'),
 
@@ -126,9 +134,25 @@ const http = {
   resetDemo: () => request('/demo/reset', { method: 'POST' })
 };
 
+// ?voice=mock keeps the scripted voice demo even where live Tomi is set up.
+const SCRIPTED_VOICE = new URLSearchParams(window.location.search).get('voice') === 'mock';
+
 const mockApi = {
   ...mock,
   ...authMock,
+  // Live Tomi in the browser wherever the voice token route is set up (frontend/api/voice/sessions.js);
+  // otherwise the scripted voice demo from the mock.
+  async createVoiceSession(body) {
+    if (!SCRIPTED_VOICE) {
+      try {
+        const live = await http.createVoiceSession(body);
+        if (live?.session?.mode === 'livekit') return live;
+      } catch {
+        // Not set up here: fall back to the scripted demo.
+      }
+    }
+    return mock.createVoiceSession(body);
+  },
   async resetDemo() {
     authMock.resetAuth();
     return mock.resetDemo();

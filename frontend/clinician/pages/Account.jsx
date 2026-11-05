@@ -24,9 +24,9 @@ export default function Account() {
             <div><dt>Name</dt><dd>{user.name}</dd></div>
             <div><dt>Email</dt><dd>{user.email}</dd></div>
             <div><dt>Role</dt><dd>{user.role}</dd></div>
-            <div><dt>Hospital</dt><dd>{user.facility}</dd></div>
+            <div><dt>Care facility</dt><dd>{user.facility}</dd></div>
           </dl>
-          <p className="muted">To change your name, role, email or hospital, ask your hospital's CareLoop admin.</p>
+          <p className="muted">To change your name, role, email or care facility, ask your facility's CareLoop admin.</p>
         </section>
 
         <section className="panel" aria-labelledby="security-title">

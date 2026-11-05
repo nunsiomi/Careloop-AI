@@ -239,7 +239,7 @@ export function AddPatientDialog({ onClose }) {
             </select>
           </div>}
           <div className="field field-span"><label htmlFor="new-note">Discharge note</label><span className="hint">Paste it exactly as written. Tomi only ever repeats what you approve.</span><textarea id="new-note" className="textarea" rows={7} value={form.note} onChange={set('note')} /></div>
-          <p className="hint field-span">We text the patient an invite after you approve the plan. They choose how to be contacted and agree to it themselves.</p>
+          <p className="hint field-span">After you approve the plan, we email the patient an invite. With no email address, give them the invite code in person. They choose how to be contacted and agree to it themselves.</p>
           {error && <p className="error-text field-span" role="alert">{error}</p>}
           <div className="modal-actions field-span">
             <button type="button" className="btn btn-quiet" onClick={onClose}>Cancel</button>
@@ -259,7 +259,7 @@ export function SendMessageDialog({ patient: fixedPatient = null, onClose }) {
   const [patientId, setPatientId] = useState(fixedPatient?.id || '');
   const patient = reachable.find((item) => item.id === patientId) || null;
   const channels = (patient?.channels || []).filter((channel) => ['sms', 'email'].includes(channel));
-  const [channel, setChannel] = useState('sms');
+  const [channel, setChannel] = useState('email');
   const templatesQuery = useAsync(() => (patientId ? CareLoopAPI.listMessageTemplates({ patient_id: patientId }) : Promise.resolve({ templates: [] })), [patientId]);
   const templates = templatesQuery.data?.templates || [];
   const [templateId, setTemplateId] = useState('medicine');
@@ -285,9 +285,9 @@ export function SendMessageDialog({ patient: fixedPatient = null, onClose }) {
   };
 
   return (
-    <Modal title={fixedPatient ? `Send ${fixedPatient.name} a message` : 'Send a text'} onClose={onClose} wide>
+    <Modal title={fixedPatient ? `Send ${fixedPatient.name} a message` : 'Send a message'} onClose={onClose} wide>
       {patientsQuery.data && !reachable.length ? (
-        <p className="empty">No patient has agreed to texts or email yet.</p>
+        <p className="empty">No patient has agreed to email reminders yet.</p>
       ) : (
         <form className="stack-4" onSubmit={send}>
           {!fixedPatient && (
@@ -296,7 +296,7 @@ export function SendMessageDialog({ patient: fixedPatient = null, onClose }) {
               <select id="msg-patient" className="select" value={patientId} onChange={(event) => setPatientId(event.target.value)}>
                 {reachable.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
               </select>
-              <p className="hint">Only patients who agreed to texts or email are listed.</p>
+              <p className="hint">Only patients who agreed to email reminders are listed.</p>
             </div>
           )}
           {patient && (

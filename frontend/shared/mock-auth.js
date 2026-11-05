@@ -1,10 +1,11 @@
 // In-browser stand-in for the auth endpoints in docs/api_shapes.md ("Sign-in and accounts").
 // Every account, code, password and invite here is invented and exists only in this browser.
 // The real backend keeps sessions in httpOnly cookies; this mock keeps them in local storage.
+import { maskPhone, normalizePhone } from './format.js';
 import { mockDb, mockPersist, setMockFacility } from './mock-server.js';
 
 // Bump the version whenever the seeded accounts change, so browsers drop their old saved copy.
-const AUTH_KEY = 'careloop-auth-v4';
+const AUTH_KEY = 'careloop-auth-v6';
 const SESSION_KEY = { patient: 'careloop-session-patient', staff: 'careloop-session-staff' };
 const DEMO_PIN = '1234';
 const CODE_TTL = 300; // seconds a sign-in code stays valid
@@ -13,17 +14,27 @@ const MAX_TRIES = 5;
 const COMMON_PASSWORDS = ['password', 'password1', 'password123', '123456789012', 'careloop123', 'qwertyuiop', 'iloveyou', 'nigeria123', 'lagos12345', 'welcome123'];
 
 const FACILITY = 'Kestrel General Hospital';
-// Hospitals that use CareLoop. All invented. Each hospital's CareLoop admin gives its join code to their own staff;
-// nobody can create an account without it. The code never leaves the server.
-const FACILITIES = [
-  { id: 'kestrel', name: 'Kestrel General Hospital', city: 'Abuja', join_code: 'KGH-4821' },
-  { id: 'egret', name: 'Egret Teaching Hospital', city: 'Ibadan', join_code: 'ETH-3067' },
-  { id: 'hornbill', name: 'Hornbill Specialist Hospital', city: 'Kano', join_code: 'HSH-5914' },
-  { id: 'weaverbird', name: 'Weaverbird Medical Centre', city: 'Enugu', join_code: 'WMC-2738' },
-  { id: 'heron-bay', name: 'Heron Bay General Hospital', city: 'Lagos', join_code: 'HBG-6409' }
+const FACILITY_TYPES = [
+  { id: 'hospital', label: 'Hospital' },
+  { id: 'pharmacy', label: 'Pharmacy' },
+  { id: 'clinic', label: 'Clinic or health centre' },
+  { id: 'care_home', label: 'Care home' }
 ];
-const STAFF_ROLES = ['Doctor', 'Nurse', 'Follow-up nurse', 'Pharmacist', 'Care coordinator'];
+// Care facilities that use CareLoop. All invented. Each facility's CareLoop admin gives its join code to their own
+// staff; nobody can create an account without it. The code never leaves the server.
+const FACILITIES = [
+  { id: 'kestrel', type: 'hospital', name: 'Kestrel General Hospital', city: 'Abuja', country: 'Nigeria', join_code: 'KGH-4821' },
+  { id: 'egret', type: 'hospital', name: 'Egret Teaching Hospital', city: 'Ibadan', country: 'Nigeria', join_code: 'ETH-3067' },
+  { id: 'hornbill', type: 'hospital', name: 'Hornbill Specialist Hospital', city: 'Kano', country: 'Nigeria', join_code: 'HSH-5914' },
+  { id: 'weaverbird', type: 'hospital', name: 'Weaverbird Medical Centre', city: 'Enugu', country: 'Nigeria', join_code: 'WMC-2738' },
+  { id: 'heron-bay', type: 'hospital', name: 'Heron Bay General Hospital', city: 'Lagos', country: 'Nigeria', join_code: 'HBG-6409' },
+  { id: 'sunbird', type: 'pharmacy', name: 'Sunbird Pharmacy', city: 'Abuja', country: 'Nigeria', join_code: 'SBP-1956' },
+  { id: 'ibis', type: 'clinic', name: 'Ibis Family Clinic', city: 'Accra', country: 'Ghana', join_code: 'IFC-4173' },
+  { id: 'kingfisher', type: 'care_home', name: 'Kingfisher Care Home', city: 'Nairobi', country: 'Kenya', join_code: 'KCH-8352' }
+];
+const STAFF_ROLES = ['Doctor', 'Nurse', 'Follow-up nurse', 'Pharmacist', 'Pharmacy technician', 'Carer', 'Care coordinator'];
 const EMAIL_FROM = 'CareLoop';
+const ADMIN_ONLY = "Only your facility's CareLoop admin can open this page.";
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
 function seedAuth() {
@@ -38,10 +49,10 @@ function seedAuth() {
       'CG-3M9D': { code: 'CG-3M9D', kind: 'caregiver', patient_id: 'p-tola', name: 'Femi Adeyemi', relation: 'Son', facility: FACILITY, invited_by: 'Tola Adeyemi', status: 'pending' }
     },
     caregivers: [
-      { id: 'cg-1', patient_id: 'p-zainab', name: 'Hadiza Musa', relation: 'Daughter', phone_e164: '+2348000000201', scope: 'Reminders and help with tasks', added_at: new Date(Date.now() - 3 * 864e5).toISOString() }
+      { id: 'cg-1', patient_id: 'p-zainab', name: 'Hadiza Musa', relation: 'Daughter', phone_e164: '+2348000000201', email: 'hadiza.musa@kestrelmail.ng', scope: 'Reminders and help with tasks', added_at: new Date(Date.now() - 3 * 864e5).toISOString() }
     ],
     staff: [
-      { id: 'u-ada', name: 'Dr. Ada Okafor', email: 'ada.okafor@kestrelgeneral.ng', password: 'Blue-ward-morning-24', role: 'Clinician reviewer', facility: FACILITY, mfa: true, mfa_method: 'email', failures: 0, locked_until: null }
+      { id: 'u-ada', name: 'Dr. Ada Okafor', email: 'ada.okafor@kestrelgeneral.ng', password: 'Blue-ward-morning-24', role: 'Clinician reviewer', facility: FACILITY, mfa: true, mfa_method: 'email', failures: 0, locked_until: null, is_admin: true, created_at: new Date(Date.now() - 30 * 864e5).toISOString() }
     ],
     staff_invites: {
       'join-7f3k': { token: 'join-7f3k', name: 'Bisi Ola', email: 'bisi.ola@kestrelgeneral.ng', role: 'Follow-up nurse', facility: FACILITY, invited_by: 'Dr. Ada Okafor', status: 'pending' }
@@ -82,14 +93,6 @@ const inSeconds = (seconds) => new Date(Date.now() + seconds * 1000).toISOString
 const sixDigits = () => String(Math.floor(100000 + Math.random() * 900000));
 const db = () => mockDb();
 
-export function normalizePhone(raw) {
-  const digits = String(raw || '').replace(/\D/g, '');
-  if (digits.startsWith('234') && digits.length === 13) return `+${digits}`;
-  if (digits.startsWith('0') && digits.length === 11) return `+234${digits.slice(1)}`;
-  if (digits.length === 10 && /^[789]/.test(digits)) return `+234${digits}`;
-  return null;
-}
-export const maskPhone = (e164) => (e164 ? `${e164.slice(0, 4)} ••• ••• ${e164.slice(-4)}` : '');
 const maskEmail = (email) => email.replace(/^(.)(.*)(@.*)$/, (_, first, middle, domain) => `${first}${'•'.repeat(Math.min(middle.length, 6))}${domain}`);
 
 function readSession(kind) {
@@ -131,12 +134,19 @@ function newChallenge(fields) {
   auth.challenges[challenge.id] = challenge;
   return challenge;
 }
+// Codes go by email, text message (when SMS_AVAILABLE in languages.js) or a phone call. On phone sign-in
+// the email address is never shown, so the screen cannot reveal whether a number has an account.
+function demoMessage(challenge) {
+  const code = challenge.code;
+  if (challenge.via === 'voice') return { channel: 'voice', from: 'Tomi, calling from CareLoop', text: `Hello, this is Tomi from CareLoop. Your sign-in code is ${code.split('').join(' ')}. Again: ${code.split('').join(' ')}.` };
+  if (challenge.via === 'sms') return { channel: 'sms', from: 'CareLoop', text: `${code} is your CareLoop sign-in code. It works for 5 minutes. Never share it, not even with your care team.` };
+  if (!challenge.email) return null; // unknown number or no email on file: nothing is sent
+  return { channel: 'email', from: `${EMAIL_FROM} <codes@careloop.app>`, text: `Your CareLoop sign-in code is ${code}. It works for 5 minutes. Never share it, not even with your care team.` };
+}
 const challengeView = (challenge) => ({
   challenge_id: challenge.id, masked_phone: maskPhone(challenge.phone_e164), via: challenge.via,
-  expires_in: CODE_TTL, resend_in: RESEND_AFTER, demo_code: challenge.code,
-  demo_message: challenge.via === 'voice'
-    ? { channel: 'voice', from: 'Tomi, calling from CareLoop', text: `Hello, this is Tomi from CareLoop. Your sign-in code is ${challenge.code.split('').join(' ')}. Again: ${challenge.code.split('').join(' ')}.` }
-    : { channel: 'sms', from: 'CareLoop', text: `${challenge.code} is your CareLoop sign-in code. It works for 5 minutes. Never share it, not even with the hospital.` }
+  masked_email: challenge.show_email && challenge.email ? maskEmail(challenge.email) : null,
+  expires_in: CODE_TTL, resend_in: RESEND_AFTER, demo_code: challenge.code, demo_message: demoMessage(challenge)
 });
 
 function pinHolder(e164) {
@@ -151,16 +161,17 @@ export const authMock = {
   /* Patient app */
   async getPatientSession() { return ok({ session: readSession('patient') }, 40); },
 
-  async startPhoneSignIn({ phone, via = 'sms' }) {
+  async startPhoneSignIn({ phone, via = 'email' }) {
     const e164 = normalizePhone(phone);
-    if (!e164) return fail('Enter a Nigerian mobile number, for example 0803 123 4567.');
+    if (!e164) return fail('Enter a mobile number. Check the country, then type the number, for example 0803 123 4567.');
     const holder = pinHolder(e164);
+    const email = holder ? (holder.kind === 'caregiver' ? holder.caregiver.email : holder.patient.email) || null : null;
     // Same answer whether or not the number is known, so the form cannot be used to look people up.
-    const challenge = newChallenge({ phone_e164: e164, via, purpose: 'sign_in', holder: holder ? { kind: holder.kind, patient_id: holder.patient.id, caregiver_id: holder.caregiver?.id } : null });
+    const challenge = newChallenge({ phone_e164: e164, via, email, show_email: false, purpose: 'sign_in', holder: holder ? { kind: holder.kind, patient_id: holder.patient.id, caregiver_id: holder.caregiver?.id } : null });
     return ok(challengeView(challenge));
   },
 
-  async startInviteSignIn(code, { via = 'sms', phone } = {}) {
+  async startInviteSignIn(code, { via = 'email', phone, email } = {}) {
     const invite = auth.invites[code?.toUpperCase()];
     if (!invite || invite.status !== 'pending') return fail('This invite code is not valid or has been used. Ask your care team for a new one.', 404);
     let e164;
@@ -169,7 +180,10 @@ export const authMock = {
       e164 = normalizePhone(phone);
       if (!e164) return fail('Enter your own Nigerian mobile number, for example 0803 123 4567.');
     }
-    const challenge = newChallenge({ phone_e164: e164, via, purpose: 'invite', invite_code: invite.code });
+    const address = String(email || '').trim();
+    if (via === 'email' && !EMAIL_PATTERN.test(address)) return fail('Enter your email address, for example name@example.com.');
+    // The person typed this address themselves, so it is safe to show it back to them.
+    const challenge = newChallenge({ phone_e164: e164, via, email: via === 'email' ? address : null, show_email: true, purpose: 'invite', invite_code: invite.code });
     return ok(challengeView(challenge));
   },
 
@@ -198,11 +212,12 @@ export const authMock = {
       const patient = db().patients.find((item) => item.id === invite.patient_id);
       invite.status = 'accepted';
       if (invite.kind === 'caregiver') {
-        const caregiver = { id: token('cg'), patient_id: patient.id, name: invite.name, relation: invite.relation, phone_e164: challenge.phone_e164, scope: 'See the plan, tasks and visits. Report on their behalf.', added_at: new Date().toISOString() };
+        const caregiver = { id: token('cg'), patient_id: patient.id, name: invite.name, relation: invite.relation, phone_e164: challenge.phone_e164, email: challenge.email || invite.email || null, scope: 'See the plan, tasks and visits. Report on their behalf.', added_at: new Date().toISOString() };
         auth.caregivers.push(caregiver);
         session = patientSession({ kind: 'caregiver', patient, caregiver });
       } else {
         patient.activation_status = patient.consent_at ? patient.activation_status : 'invited';
+        if (challenge.email) patient.email = challenge.email;
         session = patientSession({ kind: 'patient', patient });
       }
     } else {
@@ -275,12 +290,13 @@ export const authMock = {
       invites: Object.values(auth.invites).filter((item) => item.patient_id === patientId && item.kind === 'caregiver' && item.status === 'pending')
     });
   },
-  async inviteCaregiver(patientId, { name, relation, phone }) {
+  async inviteCaregiver(patientId, { name, relation, phone, email }) {
     if (!name?.trim()) return fail('Enter their name.');
-    if (!normalizePhone(phone)) return fail('Enter their Nigerian mobile number, for example 0803 123 4567.');
+    if (!normalizePhone(phone)) return fail('Enter their mobile number. Check the country, then type the number, for example 0803 123 4567.');
+    if (!EMAIL_PATTERN.test(String(email || '').trim())) return fail('Enter their email address, so we can send them the invite.');
     const code = `CG-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
     const patient = db().patients.find((item) => item.id === patientId);
-    auth.invites[code] = { code, kind: 'caregiver', patient_id: patientId, name: name.trim(), relation: relation || 'Family', facility: db().facility || FACILITY, invited_by: patient.name, status: 'pending', masked_phone: maskPhone(normalizePhone(phone)) };
+    auth.invites[code] = { code, kind: 'caregiver', patient_id: patientId, name: name.trim(), relation: relation || 'Family', facility: db().facility || FACILITY, invited_by: patient.name, status: 'pending', masked_phone: maskPhone(normalizePhone(phone)), email: String(email).trim() };
     return ok({ invite: auth.invites[code] });
   },
   async removeCaregiver(patientId, caregiverId) {
@@ -385,28 +401,28 @@ export const authMock = {
     return ok({ session: staffSession(user, false) });
   },
 
-  /* Self sign-up: any email address, a hospital from the list, then email check and two-step setup. */
-  // demo_join_code is mock-only, so testers can sign up without a hospital admin. The real backend never returns join codes.
-  async listFacilities() { return ok({ facilities: FACILITIES.map(({ join_code, ...facility }) => ({ ...facility, demo_join_code: join_code })), roles: STAFF_ROLES }, 120); },
+  /* Self sign-up: any email address, a care facility from the list, then an email check. */
+  // demo_join_code is mock-only, so testers can sign up without a facility admin. The real backend never returns join codes.
+  async listFacilities() { return ok({ types: FACILITY_TYPES, facilities: FACILITIES.map(({ join_code, ...facility }) => ({ ...facility, demo_join_code: join_code })), roles: STAFF_ROLES }, 120); },
 
   async staffSignUp({ name, email, password, facility_id, join_code, role, confirmed }) {
     const cleanEmail = String(email || '').trim().toLowerCase();
     const facility = FACILITIES.find((item) => item.id === facility_id);
     if (!name?.trim() || name.trim().length < 3) return fail('Enter your full name.');
     if (!EMAIL_PATTERN.test(cleanEmail)) return fail('Enter an email address, for example amina@gmail.com.');
-    if (!facility) return fail('Choose your hospital.');
+    if (!facility) return fail('Choose where you work.');
     const guard = auth.join_failures;
-    if (guard.locked_until && guard.locked_until > new Date().toISOString()) return fail('Too many wrong hospital codes. Wait 10 minutes, then try again.', 429);
-    if (String(join_code || '').trim().toUpperCase().replace(/s/g, '') !== facility.join_code) {
+    if (guard.locked_until && guard.locked_until > new Date().toISOString()) return fail('Too many wrong facility codes. Wait 10 minutes, then try again.', 429);
+    if (String(join_code || '').trim().toUpperCase().replace(/\s/g, '') !== facility.join_code) {
       guard.count += 1;
-      if (guard.count >= MAX_TRIES) { guard.locked_until = inSeconds(600); guard.count = 0; return fail('Too many wrong hospital codes. Wait 10 minutes, then try again.', 429); }
-      return fail(`That code is not right for ${facility.name}. Ask your hospital's CareLoop admin for it.`, 403, { field: 'join_code' });
+      if (guard.count >= MAX_TRIES) { guard.locked_until = inSeconds(600); guard.count = 0; return fail('Too many wrong facility codes. Wait 10 minutes, then try again.', 429); }
+      return fail(`That code is not right for ${facility.name}. Ask your facility's CareLoop admin for it.`, 403, { field: 'join_code' });
     }
     guard.count = 0;
     if (!STAFF_ROLES.includes(role)) return fail('Choose your role.');
     const problem = passwordProblem(password, cleanEmail);
     if (problem) return fail(problem);
-    if (!confirmed) return fail('Confirm that you work at this hospital.');
+    if (!confirmed) return fail(`Confirm that you work at ${facility.name}.`);
     const signupToken = token('su');
     const existing = auth.staff.some((item) => item.email.toLowerCase() === cleanEmail);
     const code = sixDigits();
@@ -468,12 +484,62 @@ export const authMock = {
     return ok({ ok: true }, 120);
   },
 
+  /* Care team at the signed-in person's facility, assignment, and the facility admin page */
+  async listStaff() {
+    const session = readSession('staff');
+    if (!session) return fail('Your session has ended. Sign in again.', 401);
+    return ok({ staff: auth.staff.filter((item) => item.facility === session.user.facility).map(({ id, name, role }) => ({ id, name, role })) }, 80);
+  },
+  async assignPatient(patientId, { staff_id }) {
+    const session = readSession('staff');
+    if (!session) return fail('Your session has ended. Sign in again.', 401);
+    const patient = db().patients.find((item) => item.id === patientId);
+    const lead = staff_id ? auth.staff.find((item) => item.id === staff_id && item.facility === session.user.facility) : null;
+    if (staff_id && !lead) return fail('Choose someone from your care team.');
+    patient.assigned_to = lead ? { id: lead.id, name: lead.name } : null;
+    const stamp = new Date().toISOString();
+    db().events.push({ id: token('ev'), patient_id: patientId, reported_at: stamp, recorded_at: stamp, actor_type: 'clinician', actor_id: session.user.name, source_channel: 'dashboard', event_type: 'patient_assigned', summary: lead ? `Lead clinician set to ${lead.name}.` : 'Lead clinician removed.', verification_status: 'clinician_verified', supersedes_event_id: null });
+    return ok({ patient: { ...patient } });
+  },
+  async getAdminFacility() {
+    const { session, facility } = adminContext();
+    if (!session) return fail(ADMIN_ONLY, 403);
+    const staff = auth.staff.filter((item) => item.facility === facility.name).map((item) => {
+      const seen = auth.staff_sessions.filter((entry) => entry.user_id === item.id).map((entry) => entry.last_seen_at).sort().at(-1) || null;
+      return { id: item.id, name: item.name, email: item.email, role: item.role, is_admin: Boolean(item.is_admin), joined_at: item.created_at || null, last_seen_at: seen };
+    }).sort((first, second) => (second.joined_at || '').localeCompare(first.joined_at || ''));
+    const { id, type, name, city, country, join_code } = facility;
+    return ok({ facility: { id, type, name, city, country, join_code }, staff });
+  },
+  async newJoinCode() {
+    const { session, facility } = adminContext();
+    if (!session) return fail(ADMIN_ONLY, 403);
+    facility.join_code = `${facility.join_code.split('-')[0]}-${Math.floor(1000 + Math.random() * 9000)}`;
+    return ok({ join_code: facility.join_code });
+  },
+  async removeStaff(staffId) {
+    const { session, facility } = adminContext();
+    if (!session) return fail(ADMIN_ONLY, 403);
+    if (staffId === session.user.id) return fail('You cannot remove your own account.', 409);
+    auth.staff = auth.staff.filter((item) => item.id !== staffId || item.facility !== facility.name);
+    auth.staff_sessions = auth.staff_sessions.filter((item) => item.user_id !== staffId);
+    db().patients.forEach((patient) => { if (patient.assigned_to?.id === staffId) patient.assigned_to = null; });
+    return ok({ ok: true });
+  },
+
   resetAuth() {
     auth = seedAuth();
     writeSession('patient', null);
     save();
   }
 };
+
+function adminContext() {
+  const session = readSession('staff');
+  const user = session && auth.staff.find((item) => item.id === session.user.id);
+  if (!user?.is_admin) return {};
+  return { session, facility: FACILITIES.find((item) => item.name === user.facility) };
+}
 
 function emailCodeMessage(code, purpose) {
   return { channel: 'email', from: EMAIL_FROM, text: `${code} is your code to ${purpose}. It works for 15 minutes. If you did not ask for it, ignore this email.` };
@@ -483,18 +549,18 @@ function existingAccountMessage() {
 }
 
 function newStaffUser(account) {
-  const user = { id: token('u'), ...account, mfa: true, mfa_method: 'email', failures: 0, locked_until: null };
+  const user = { id: token('u'), ...account, mfa: true, mfa_method: 'email', failures: 0, locked_until: null, is_admin: false, created_at: new Date().toISOString() };
   auth.staff.push(user);
   return user;
 }
 
 function staffSession(user, rememberDevice) {
-  // The sample patients and their invites belong to the hospital of whoever is signed in.
+  // The sample patients and their invites belong to the care facility of whoever is signed in.
   setMockFacility(user.facility);
   Object.values(auth.invites).forEach((invite) => { invite.facility = user.facility; });
   const session = {
     id: token('ss'),
-    user: { id: user.id, name: user.name, email: user.email, role: user.role, facility: user.facility, initials: user.name.replace(/^Dr\.\s*/, '').split(' ').map((part) => part[0]).join('').slice(0, 2) },
+    user: { id: user.id, name: user.name, email: user.email, role: user.role, facility: user.facility, initials: user.name.replace(/^Dr\.\s*/, '').split(' ').map((part) => part[0]).join('').slice(0, 2), is_admin: Boolean(user.is_admin) },
     remember_device: rememberDevice,
     idle_lock_minutes: 15,
     expires_at: inSeconds(12 * 3600)
@@ -519,4 +585,4 @@ export function passwordProblem(password, email = '') {
   return null;
 }
 
-export const DEMO_AUTH = { pin: DEMO_PIN, staffEmail: 'ada.okafor@kestrelgeneral.ng', staffPassword: 'Blue-ward-morning-24', patientInvite: 'CL-7K4Q', caregiverInvite: 'CG-3M9D', staffInvite: 'join-7f3k', hospitalCodes: Object.fromEntries(FACILITIES.map((item) => [item.name, item.join_code])) };
+export const DEMO_AUTH = { pin: DEMO_PIN, staffEmail: 'ada.okafor@kestrelgeneral.ng', staffPassword: 'Blue-ward-morning-24', patientInvite: 'CL-7K4Q', caregiverInvite: 'CG-3M9D', staffInvite: 'join-7f3k', facilityCodes: Object.fromEntries(FACILITIES.map((item) => [item.name, item.join_code])) };

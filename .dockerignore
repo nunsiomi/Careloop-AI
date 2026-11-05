@@ -1,0 +1,14 @@
+.git
+.env
+.env.*
+!.env.example
+**/*.db
+**/__pycache__
+**/.pytest_cache
+**/.venv
+**/node_modules
+frontend/dist
+frontend/_legacy
+docs
+voice/*
+!voice/prompts

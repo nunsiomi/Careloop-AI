@@ -2,8 +2,10 @@ fastapi
 uvicorn[standard]
 pydantic>=2
 apscheduler
-anthropic
-livekit-agents
+sqlalchemy>=2
+psycopg[binary]  # hosted Postgres; SQLite needs nothing extra
+groq
+-r voice/requirements.txt
 httpx
 pytest
 pytest-asyncio

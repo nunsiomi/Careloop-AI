@@ -36,7 +36,7 @@ function AuthFrame({ title, lede, children, back }) {
             ))}
           </ol>
         </section>
-        <p className="staff-auth-foot">For doctors, nurses and pharmacists at hospitals that use CareLoop. Patients and families use the CareLoop app on their phones.</p>
+        <p className="staff-auth-foot">For doctors, nurses, pharmacists and carers at hospitals, pharmacies, clinics and care homes that use CareLoop. Patients and families use the CareLoop app on their phones.</p>
       </aside>
       <main className="staff-auth-main">
         <div className="staff-auth-card">
@@ -142,7 +142,7 @@ export function VerifyMfa({ onSignedIn }) {
       <p className="staff-links">
         <button type="button" className="link-button" onClick={resend} disabled={resendLeft > 0}>{resendLeft > 0 ? `Send a new code in ${clock(resendLeft)}` : 'Send a new code'}</button>
       </p>
-      <p className="hint">Nothing arrived? Check your spam folder. If you can no longer use this email address, ask your hospital's CareLoop admin to change it.</p>
+      <p className="hint">Nothing arrived? Check your spam folder. If you can no longer use this email address, ask your facility's CareLoop admin to change it.</p>
       <IncomingMessage message={email.message} />
     </AuthFrame>
   );
@@ -168,7 +168,7 @@ export function ForgotPassword() {
   if (sent) {
     return (
       <AuthFrame title="Check your email" lede={`If ${email} has a CareLoop account, we have sent it a link to choose a new password. The link works for 30 minutes.`} back={{ to: '/sign-in', label: 'Back to sign in' }}>
-        <p className="hint">Nothing arrived after a few minutes? Check spam, or ask your hospital's CareLoop admin to confirm the address on your account.</p>
+        <p className="hint">Nothing arrived after a few minutes? Check spam, or ask your facility's CareLoop admin to confirm the address on your account.</p>
         <button type="button" className="btn btn-secondary btn-lg" onClick={() => setSent(null)}>Send it again</button>
         <IncomingMessage message={sent.demo_message} />
       </AuthFrame>
@@ -245,7 +245,7 @@ export function ResetPassword() {
   );
 }
 
-/* ---------- Create an account: details with the hospital code, then confirm email ---------- */
+/* ---------- Create an account: details with the facility code, then confirm email ---------- */
 
 const SIGN_UP_STEPS = [['details', 'Your details'], ['email', 'Confirm email']];
 
@@ -261,7 +261,7 @@ function SetupSteps({ steps, current }) {
 export function SignUp({ onSignedIn }) {
   const options = useAsync(() => CareLoopAPI.listFacilities(), []);
   const [stage, setStage] = useState('details');
-  const [form, setForm] = useState({ name: '', email: '', facility_id: '', join_code: '', role: '', password: '', confirmed: false });
+  const [form, setForm] = useState({ name: '', email: '', facility_type: '', facility_id: '', join_code: '', role: '', password: '', confirmed: false });
   const [signup, setSignup] = useState(null);
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
@@ -328,14 +328,16 @@ export function SignUp({ onSignedIn }) {
     );
   }
 
-  const facilities = options.data?.facilities || [];
+  const types = options.data?.types || [];
+  const facilities = (options.data?.facilities || []).filter((item) => item.type === form.facility_type);
   const roles = options.data?.roles || [];
   const chosen = facilities.find((item) => item.id === form.facility_id);
+  const typeLabel = types.find((item) => item.id === form.facility_type)?.label.toLowerCase();
   const codeError = error?.field === 'join_code';
   const ready = form.name.trim() && form.email.includes('@') && form.facility_id && form.join_code.trim().length >= 4 && form.role && form.password.length >= 12 && form.confirmed;
 
   return (
-    <AuthFrame title="Create your account" lede="You need your hospital's code to sign up. Your hospital's CareLoop admin gives it to staff.">
+    <AuthFrame title="Create your account" lede="You need your care facility's code to sign up. Its CareLoop admin gives the code to staff.">
       {progress}
       <form className="staff-form" onSubmit={create} noValidate>
         <div className="field">
@@ -349,25 +351,33 @@ export function SignUp({ onSignedIn }) {
           <p id="signup-email-hint" className="hint">Any address you check often. Your sign-in codes go here.</p>
         </div>
         <div className="field">
-          <label htmlFor="signup-facility">Hospital</label>
-          <select id="signup-facility" className="select input-lg" value={form.facility_id} onChange={(event) => set('facility_id')(event.target.value)} disabled={!facilities.length}>
-            <option value="" disabled>{options.loading ? 'Loading hospitals…' : 'Choose your hospital'}</option>
-            {facilities.map((item) => <option key={item.id} value={item.id}>{item.name}, {item.city}</option>)}
+          <label htmlFor="signup-facility-type">Where you work</label>
+          <select id="signup-facility-type" className="select input-lg" value={form.facility_type} onChange={(event) => { setForm((current) => ({ ...current, facility_type: event.target.value, facility_id: '' })); setError(null); }} disabled={!types.length}>
+            <option value="" disabled>{options.loading ? 'Loading…' : 'Choose a type of care facility'}</option>
+            {types.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
           </select>
         </div>
         <div className="field">
-          <label htmlFor="signup-join-code">Hospital code</label>
+          <label htmlFor="signup-facility">{typeLabel ? `Your ${typeLabel}` : 'Your care facility'}</label>
+          <select id="signup-facility" className="select input-lg" value={form.facility_id} onChange={(event) => set('facility_id')(event.target.value)} disabled={!facilities.length} aria-describedby={form.facility_type ? undefined : 'signup-facility-hint'}>
+            <option value="" disabled>{typeLabel ? `Choose your ${typeLabel}` : 'Choose where you work first'}</option>
+            {facilities.map((item) => <option key={item.id} value={item.id}>{item.name}, {item.city}, {item.country}</option>)}
+          </select>
+          {!form.facility_type && <p id="signup-facility-hint" className="hint">Hospital, pharmacy, clinic or care home.</p>}
+        </div>
+        <div className="field">
+          <label htmlFor="signup-join-code">Facility code</label>
           <input id="signup-join-code" className="input input-lg mono-ish" value={form.join_code} onChange={(event) => set('join_code')(event.target.value.toUpperCase().slice(0, 12))} autoComplete="off" spellCheck={false} placeholder="ABC-1234" aria-invalid={codeError || undefined} aria-describedby={codeError ? 'signup-join-code-error' : 'signup-join-code-hint'} />
           {codeError
             ? <p id="signup-join-code-error" className="field-error" role="alert">{error.message}</p>
-            : <p id="signup-join-code-hint" className="hint">Only staff with this code can join {chosen ? chosen.name : 'your hospital'}.</p>}
+            : <p id="signup-join-code-hint" className="hint">Only staff with this code can join {chosen ? chosen.name : 'your care facility'}.</p>}
         </div>
         {chosen?.demo_join_code && (
           <aside className="mvp-code" aria-labelledby="mvp-code-title">
             <Info aria-hidden="true" size={20} />
             <div>
               <p id="mvp-code-title" className="mvp-code-title">Code for {chosen.name}: <strong className="mono-ish">{chosen.demo_join_code}</strong></p>
-              <p>You can see this code because CareLoop is an MVP, so anyone can try it. In real use, the hospital or care facility gives this code only to its own staff.</p>
+              <p>You can see this code because CareLoop is an MVP, so anyone can try it. In real use, the hospital, pharmacy or care facility gives this code only to its own staff.</p>
               {form.join_code !== chosen.demo_join_code && (
                 <button type="button" className="btn btn-secondary" onClick={() => { set('join_code')(chosen.demo_join_code); setError(null); }}>Use this code</button>
               )}
@@ -385,7 +395,7 @@ export function SignUp({ onSignedIn }) {
         <div id="signup-rules"><PasswordRules password={form.password} email={form.email} /></div>
         <label className="check check-top">
           <input type="checkbox" checked={form.confirmed} onChange={(event) => set('confirmed')(event.target.checked)} />
-          <span>I work at {chosen ? chosen.name : 'this hospital'} and will only open the records of patients in my care.</span>
+          <span>I work at {chosen ? chosen.name : 'this care facility'} and will only open the records of patients in my care.</span>
         </label>
         <ErrorNote error={options.error} onRetry={options.reload} />
         {error && !codeError && <p className="field-error" role="alert">{error.message}</p>}
