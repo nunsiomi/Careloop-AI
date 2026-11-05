@@ -260,7 +260,6 @@ export const authMock = {
     const session = readSession('patient');
     if (!session) return fail('Your session has ended. Sign in again.', 401);
     if (!/^\d{4}$/.test(pin)) return fail('Your PIN must be 4 numbers.');
-    if (/^(\d)\1{3}$/.test(pin) || ['0123', '4321', '9876'].includes(pin)) return fail('That PIN is easy to guess. Choose different numbers.');
     auth.patient_pins[session.phone_e164] = pin;
     if (session.kind === 'patient') {
       // One PIN for the app and for Tomi's phone calls.

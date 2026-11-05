@@ -7,11 +7,14 @@ Order for every message:
 2. A pending question ("Is that right?") is answered with yes or no.
 3. Quick replies (buttons the patient tapped) are explicit, so they act at once.
 4. Free text goes to the Check-in Agent (Dorcas). Marking a task done waits for the patient's "yes". A barrier
-   opens straight away (it only offers an approved contact). Its reply is used only if it passes the number check
-   and the advice guard; otherwise a fixed, approved line is sent.
+   opens straight away (it only offers an approved contact). Anything else (a question, a hello) goes to Tomi's
+   chat agent, which answers from the patient's own plan, can say what a plan medicine is generally for
+   (MedlinePlus) and passes other questions to the care team. Every model reply is used only if it passes the
+   number check and the advice guard; otherwise a fixed, approved line is sent.
 5. Without a model (no GROQ_API_KEY or an error), simple word matching does the same jobs.
 """
 
+import json
 import logging
 import os
 import re
@@ -19,16 +22,19 @@ import re
 from groq import GroqError
 
 from app.agents import barrier as barrier_agent
-from app.agents import checkin
+from app.agents import checkin, tomi_chat
 from app.db import store
 from app.safety import number_check
 from app.safety import rules as safety
-from app.services import care, escalations
+from app.services import briefs, care, drug_info, escalations
 from app.services.activity_log import log_event
 from app.util import now_iso
 
 log = logging.getLogger("careloop.chat")
 YES = re.compile(r"^(yes|yeah|yep|y|correct|that is right|that's right|right|ok|okay|eh|ee|ehen|ehn|i|beeni|bee ni|odi|o di)\b")
+# A question to Tomi, in English or in common Hausa, Yoruba and Igbo question words.
+QUESTION = re.compile(r"\?\s*$|^\s*(what|when|where|which|who|why|how|is|are|do|does|did|can|could|should|will|tell me|explain|"
+                      r"me ne|mene|yaushe|wane|wace|kí ni|ki ni|nígbà wo|nigba wo|níbo|nibo|èló|elo|gịnị|gini|olee|kedu|mgbe ole)\b", re.I)
 NO = re.compile(r"^(no|nope|not really|a'?a|aa|rara|mba|ko)\b")
 # Reply wording that would change treatment. Model replies containing any of these are never sent.
 ADVICE = re.compile(r"\b(stop taking|stop the|increase|decrease|reduce|double|skip|extra dose|more than|less than|instead of|switch to|"
@@ -40,6 +46,7 @@ FIXED = {
     "received": "Thank you. Your message has been received. Your care team can see it.",
     "unchanged": "Okay, I have not changed anything. Your care team can see your message.",
     "no_flag": "Thank you for telling me. If anything changes or you feel very unwell, go to the nearest hospital now.",
+    "passed_on": "I have passed your question to your care team. Someone will get back to you.",
 }
 
 
@@ -59,12 +66,60 @@ def _approved_sources(patient: dict) -> list[str]:
     return [str(plan.get(key, "")) for key in ("medications", "appointments", "tests")] + [f"{task['title']} {task['detail']} {care.task_time(task)}" for task in tasks]
 
 
-def guarded(reply: str | None, patient: dict, fallback: str) -> str:
+def _clock_hours(sources: list[str]) -> set[str]:
+    """"09:00" on the plan also allows "9" and "9 am" in a reply."""
+    hours = set()
+    for hour, _ in re.findall(r"\b([01]?\d|2[0-3]):([0-5]\d)\b", " ".join(sources)):
+        hours |= {str(int(hour)), str(int(hour) % 12 or 12)}
+    return hours
+
+
+def guarded(reply: str | None, patient: dict, fallback: str, extra_sources: list[str] | None = None, limit: int = 320) -> str:
     """The model's reply only if it adds no number and gives no advice; otherwise the fixed line."""
     text = (reply or "").strip()
-    if not text or len(text) > 320 or ADVICE.search(text) or safety.check(text).action != "continue":
+    if not text or len(text) > limit or ADVICE.search(text) or safety.check(text).action != "continue":
         return fallback
-    return text if number_check.check(text, _approved_sources(patient)).passed else fallback
+    sources = _approved_sources(patient) + (extra_sources or [])
+    return text if number_check.check(text, sources, _clock_hours(sources)).passed else fallback
+
+
+async def _tomi_answer(patient: dict, text: str, actor: str | None) -> str | None:
+    """Tomi's answer to a question or a hello, from the patient's own plan. None when the model is unavailable."""
+    brief = briefs.patient_brief(patient)
+    on_plan = [drug_info.clean_name(item["name"]) for item in brief["medicines"]]
+    looked_up: list[str] = []
+    passed_on: list[str] = []
+
+    async def look_up_medicine(name: str = "") -> dict:
+        wanted = drug_info.clean_name(name)
+        if not wanted or not any(wanted in item or item in wanted for item in on_plan if item):
+            return {"found": False, "note": "This medicine is not on their plan. Pass the question to the care team."}
+        info = drug_info.for_patient(await drug_info.look_up(name))
+        looked_up.append(json.dumps(info))
+        return info
+
+    async def ask_to_move_visit(reason: str = "") -> dict:
+        moved = care.request_reschedule(patient, reason or text, "web", text)
+        return {"ok": bool(moved), "note": "Asked the clinic for a new time. The current visit stays booked until they confirm."
+                if moved else "There is no upcoming visit to move. Offer to pass it to the care team."}
+
+    async def ask_care_team(question: str = "") -> dict:
+        question = (question or text).strip()[:500]
+        log_event(patient["id"], actor_type="caregiver" if actor and actor != patient["name"] else "patient", actor_id=actor or patient["name"],
+                  source_channel="web", event_type="question_for_care_team", summary=f'Asked the care team: "{question}"', verification_status="self_reported")
+        passed_on.append(question)
+        return {"ok": True, "note": "Passed to the care team. Tell them someone will get back to them."}
+
+    _, history = _checkin_context(patient)
+    try:
+        reply = await tomi_chat.run({"message": text, "patient": brief, "speaker": actor or patient["name"], "history": history,
+                                     "today": care.local(now_iso()).strftime("%A %d %B %Y, %H:%M")},
+                                    {"look_up_medicine": look_up_medicine, "ask_care_team": ask_care_team, "ask_to_move_visit": ask_to_move_visit})
+    except (GroqError, ValueError) as error:
+        log.warning("Tomi chat agent unavailable: %s", error)
+        return FIXED["passed_on"] if passed_on else None
+    fallback = FIXED["passed_on"] if passed_on else FIXED["received"]
+    return guarded(reply, patient, fallback, [json.dumps(brief, ensure_ascii=False), *looked_up], limit=600)
 
 
 def _checkin_context(patient: dict) -> tuple[dict, list[dict]]:
@@ -155,7 +210,14 @@ async def handle(patient: dict, payload: dict, actor: str | None = None) -> dict
             result["reply"] = FIXED["received"]
         return result
 
-    # 4. Free text: visit moves are handled directly (the Check-in Agent has no tool for them)
+    # 4. Free text. A question goes straight to Tomi, who answers from the plan (or passes it to the care team).
+    if os.getenv("GROQ_API_KEY") and QUESTION.search(safety.normalize(text)):
+        answer = await _tomi_answer(patient, text, actor)
+        if answer:
+            result["reply"] = answer
+            return result
+
+    # Visit moves are handled directly (the Check-in Agent has no tool for them)
     kind = care.classify(text)
     if kind["kind"] == "reschedule":
         moved = care.request_reschedule(patient, text, "web", text)
@@ -179,7 +241,8 @@ async def handle(patient: dict, payload: dict, actor: str | None = None) -> dict
                 patient["pending_check"] = {"type": "task_done", "task_id": proposed["id"], "at": now_iso()}
                 result["reply"] = f"I heard that you have done this: {proposed['title']}. Is that right? Please reply yes or no."
             else:
-                result["reply"] = guarded(proposal["reply_draft"], patient, FIXED["received"])
+                answer = await _tomi_answer(patient, text, actor)
+                result["reply"] = answer or guarded(proposal["reply_draft"], patient, FIXED["received"])
             log_event(patient["id"], actor_type="agent", actor_id="Check-in Agent", source_channel="web", event_type="checkin_proposal",
                       summary=f"Read the message as: {proposal['intent'].replace('_', ' ')}"
                               f"{' (needs the patient to confirm)' if proposal['requires_confirmation'] else ''}.", verification_status="system_recorded")

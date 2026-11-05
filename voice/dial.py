@@ -32,7 +32,7 @@ async def dial_with_livekit(phone: str) -> None:
         await lk.agent_dispatch.create_dispatch(
             api.CreateAgentDispatchRequest(agent_name=AGENT_NAME, room=room, metadata=json.dumps(metadata))
         )
-    print(f"Tomi is calling {phone} (room {room}). Answer, then type PIN 1234.")
+    print(f"Tomi is calling {phone} (room {room}). Answer and talk to Tomi.")
 
 
 async def dial_with_twilio(phone: str) -> None:
@@ -60,7 +60,7 @@ async def dial_with_twilio(phone: str) -> None:
     if resp.status_code >= 300:
         sys.exit(f"Twilio said no ({resp.status_code}): {resp.json().get('message', resp.text)}")
     print(f"Twilio is calling {phone} (call {resp.json()['sid']}). Answer, press a key if Twilio asks,")
-    print("choose a language, then type PIN 1234.")
+    print("then talk to Tomi (a number not on file chooses a language first).")
 
 
 TWILIO_DEMO = "--twilio-demo" in sys.argv

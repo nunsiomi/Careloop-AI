@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Delete, Phone, PhoneOff } from 'lucide-react';
+import { Phone, PhoneOff } from 'lucide-react';
 import { CareLoopAPI } from '../shared/api.js';
 import { connectLiveVoice } from '../shared/live-voice.js';
 import { languageInfo } from '../shared/languages.js';
@@ -28,8 +28,6 @@ export default function VoiceSheet({ patient, support, onClose }) {
   const [phase, setPhase] = useState('connecting');
   const [turns, setTurns] = useState([]);
   const [keypad, setKeypad] = useState([]);
-  const [pinMode, setPinMode] = useState(false);
-  const [pin, setPin] = useState('');
   const [phrases, setPhrases] = useState([]);
   const [escalation, setEscalation] = useState(null);
   const [error, setError] = useState(null);
@@ -78,7 +76,6 @@ export default function VoiceSheet({ patient, support, onClose }) {
     setTurns((current) => current.concat(result.turns.map((turn) => ({ ...turn, key: `${turn.at}-${Math.random()}` }))));
     setPhase('speaking');
     setKeypad([]);
-    setPinMode(false);
     if (result.escalation) setEscalation(result.escalation);
     const spoken = result.turns.map((turn) => turn.transcript).join(' ');
     window.clearTimeout(timer.current);
@@ -86,7 +83,6 @@ export default function VoiceSheet({ patient, support, onClose }) {
       if (result.ended) { setPhase('ended'); return; }
       setPhase('listening');
       setKeypad(result.keypad || []);
-      setPinMode(Boolean(result.pin_required));
     }, speakingTime(spoken));
   };
 
@@ -132,13 +128,6 @@ export default function VoiceSheet({ patient, support, onClose }) {
     }
   };
 
-  const pressPinDigit = (digit) => {
-    if (pin.length >= 4) return;
-    const next = pin + digit;
-    setPin(next);
-    if (next.length === 4) { setPin(''); sendInput({ pin: next, digit: null }, 'PIN entered'); }
-  };
-
   const latestTomi = [...turns].reverse().find((turn) => turn.speaker === 'tomi');
   const listening = phase === 'listening';
 
@@ -182,21 +171,7 @@ export default function VoiceSheet({ patient, support, onClose }) {
         </div>
       )}
 
-      {pinMode && listening && (
-        <div className="voice-panel">
-          <p className="voice-panel-title">Enter your PIN</p>
-          <p className="pin-dots" aria-label={`${pin.length} of 4 digits entered`}>{[0, 1, 2, 3].map((index) => <span key={index} className={index < pin.length ? 'is-filled' : ''} />)}</p>
-          <div className="keypad" role="group" aria-label="Keypad">
-            {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((digit) => <button key={digit} type="button" className="key" onClick={() => pressPinDigit(digit)}>{digit}</button>)}
-            <span />
-            <button type="button" className="key" onClick={() => pressPinDigit('0')}>0</button>
-            <button type="button" className="key" aria-label="Delete last digit" onClick={() => setPin(pin.slice(0, -1))}><Delete aria-hidden="true" /></button>
-          </div>
-          {PRESENTER && session?.demo_pin && <p className="voice-hint">Presenter note: the PIN is {session.demo_pin}</p>}
-        </div>
-      )}
-
-      {!pinMode && listening && (
+      {listening && (
         <div className="voice-panel">
           {keypad.length > 0 && (
             <div className="voice-options" role="group" aria-label="Press a number">

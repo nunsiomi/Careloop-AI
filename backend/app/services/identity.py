@@ -226,23 +226,9 @@ def sign_in_with_pin(phone_e164: str, pin: str, client: str = "") -> tuple[dict,
     return _patient_session_view(session), raw
 
 
-def verify_voice_pin(phone_e164: str, pin: str) -> tuple[bool, str | None, int]:
-    """Tomi's phone PIN check. Shares the app's lock: same counter, same 5 tries."""
-    patient = store().first("patients", phone_e164=phone_e164)
-    guard = store().counter(f"pin:{phone_e164}")
-    if not patient or guard["count"] >= MAX_TRIES or not check_secret(pin, patient.get("pin_hash")):
-        if patient and guard["count"] < MAX_TRIES:
-            guard["count"] += 1
-        return False, None, max(MAX_TRIES - guard["count"], 0)
-    guard["count"] = 0
-    return True, patient["id"], MAX_TRIES
-
-
 def set_pin(session: dict, pin: str) -> dict:
     if not str(pin).isdigit() or len(str(pin)) != 4:
         raise ApiError("Your PIN must be 4 numbers.")
-    if len(set(pin)) == 1 or pin in ("0123", "1234", "4321", "9876", "2580"):
-        raise ApiError("That PIN is easy to guess. Choose different numbers.")
     record = _pin_record(session)
     record["pin_hash"] = hash_secret(pin)
     if session["kind"] == "patient":

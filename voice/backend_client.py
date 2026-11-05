@@ -24,13 +24,13 @@ logger = logging.getLogger("tomi.backend")
 
 class Backend(Protocol):
     async def start_call(self, *, direction: str, phone_e164: str | None, patient_id: str | None) -> dict: ...
-    async def verify_pin(self, *, call_id: str, phone_e164: str | None, pin: str) -> dict: ...
     async def call_context(self, *, call_id: str, patient_id: str) -> dict: ...
     async def check_turn(self, *, call_id: str, patient_id: str, text: str, language: str, confidence: float | None = None) -> dict: ...
     async def log_turn(self, *, call_id: str, speaker: str, text: str, language: str) -> None: ...
     async def record_task_update(self, *, call_id: str, patient_id: str, task_id: str, status: str, patient_words: str) -> dict: ...
     async def report_problem(self, *, call_id: str, patient_id: str, kind: str, patient_words: str, task_id: str | None) -> dict: ...
     async def ask_care_team(self, *, call_id: str, patient_id: str, question: str) -> dict: ...
+    async def medicine_info(self, *, call_id: str, name: str) -> dict: ...
     async def end_call(self, *, call_id: str, outcome: str, log: list[dict]) -> None: ...
 
 
@@ -49,9 +49,6 @@ class HttpBackend:
 
     async def start_call(self, *, direction, phone_e164, patient_id):
         return (await self._post("/voice/calls", {"direction": direction, "phone_e164": phone_e164, "patient_id": patient_id}))["call"]
-
-    async def verify_pin(self, *, call_id, phone_e164, pin):
-        return await self._post(f"/voice/calls/{call_id}/verify-pin", {"phone_e164": phone_e164, "pin": pin})
 
     async def call_context(self, *, call_id, patient_id):
         resp = await self._client.get(f"/voice/calls/{call_id}/context")
@@ -73,6 +70,9 @@ class HttpBackend:
 
     async def ask_care_team(self, *, call_id, patient_id, question):
         return await self._post(f"/voice/calls/{call_id}/questions", {"original_text": question})
+
+    async def medicine_info(self, *, call_id, name):
+        return await self._post(f"/voice/calls/{call_id}/medicine", {"name": name})
 
     async def end_call(self, *, call_id, outcome, log):
         await self._post(f"/voice/calls/{call_id}/end", {"outcome": outcome, "states": log})
@@ -101,14 +101,11 @@ class MockBackend:
     """In-memory stand-in for the backend. Same people and plan as frontend/shared/mock-server.js."""
 
     PHONES = {"+2348000000101": "p-zainab"}
-    PINS = {"p-zainab": "1234"}
-    MAX_TRIES = 5
 
     def __init__(self) -> None:
         self.calls: dict[str, dict] = {}
         self.events: list[dict] = []
-        self.pin_failures: dict[str, int] = {}
-        # Your own phone, for test calls in and out: it then counts as Zainab's number (PIN 1234).
+        # Your own phone, for test calls in and out: it then counts as Zainab's number.
         if os.getenv("VOICE_TEST_PHONE"):
             self.PHONES = {**self.PHONES, os.environ["VOICE_TEST_PHONE"].replace(" ", ""): "p-zainab"}
 
@@ -141,25 +138,12 @@ class MockBackend:
     async def start_call(self, *, direction, phone_e164, patient_id):
         call = {"id": f"c-{uuid.uuid4().hex[:8]}", "direction": direction, "phone_e164": phone_e164, "patient_id": patient_id,
                 "language": None, "turns": []}
-        if direction == "outbound" and patient_id:
-            call["language"] = self._context(patient_id)["patient"]["language"]
+        if direction == "inbound" and not patient_id:
+            call["patient_id"] = self.PHONES.get((phone_e164 or "").replace(" ", ""))  # known by their number, no PIN
+        if call["patient_id"] and direction != "browser":
+            call["language"] = self._context(call["patient_id"])["patient"]["language"]
         self.calls[call["id"]] = call
-        return {"id": call["id"], "language": call["language"]}
-
-    async def verify_pin(self, *, call_id, phone_e164, pin):
-        # The same answer for an unknown number and a wrong PIN, so a call never reveals who has an account.
-        key = phone_e164 or "unknown"
-        failures = self.pin_failures.get(key, 0)
-        if failures >= self.MAX_TRIES:
-            return {"ok": False, "tries_left": 0}
-        # On an outgoing call the backend already knows whose PIN to expect.
-        patient_id = self.calls.get(call_id, {}).get("patient_id") or self.PHONES.get(phone_e164 or "")
-        if patient_id and self.PINS.get(patient_id) == pin:
-            self.pin_failures.pop(key, None)
-            self.calls.setdefault(call_id, {"turns": []})["patient_id"] = patient_id
-            return {"ok": True, "patient_id": patient_id}
-        self.pin_failures[key] = failures + 1
-        return {"ok": False, "tries_left": self.MAX_TRIES - failures - 1}
+        return {"id": call["id"], "language": call["language"], "patient_id": call["patient_id"], "known": bool(call["patient_id"])}
 
     async def call_context(self, *, call_id, patient_id):
         return self._context(patient_id)
@@ -191,6 +175,10 @@ class MockBackend:
     async def ask_care_team(self, *, call_id, patient_id, question):
         self.events.append({"type": "patient_question", "original_text": question})
         return {"ok": True}
+
+    async def medicine_info(self, *, call_id, name):
+        # The real look-up (MedlinePlus) runs in the backend; set VOICE_USE_MOCKS=0 to use it.
+        return {"found": False, "note": "Medicine look-up needs the backend. Offer to pass the question to the care team."}
 
     async def end_call(self, *, call_id, outcome, log):
         call = self.calls.get(call_id, {})

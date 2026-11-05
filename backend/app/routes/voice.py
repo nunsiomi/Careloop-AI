@@ -101,11 +101,6 @@ def worker_start_call(body: dict = Body(default={})):
     return {"call": voice.start_call(body.get("direction", "inbound"), body.get("phone_e164"), body.get("patient_id"))}
 
 
-@worker.post("/voice/calls/{call_id}/verify-pin")
-def worker_verify_pin(call_id: str, body: dict = Body(default={})):
-    return voice.verify_pin(call_id, body.get("phone_e164"), str(body.get("pin", "")))
-
-
 @worker.get("/voice/calls/{call_id}/context")
 def worker_context(call_id: str):
     return {"context": voice.call_context(call_id)}
@@ -133,6 +128,11 @@ def worker_task_update(call_id: str, body: dict = Body(default={})):
 def worker_barrier(call_id: str, body: dict = Body(default={})):
     voice.barrier(call_id, body.get("type", "other"))
     return {"ok": True}
+
+
+@worker.post("/voice/calls/{call_id}/medicine")
+async def worker_medicine(call_id: str, body: dict = Body(default={})):
+    return await voice.medicine_info(call_id, str(body.get("name", "")))
 
 
 @worker.post("/voice/calls/{call_id}/questions")

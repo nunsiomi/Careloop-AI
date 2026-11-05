@@ -26,7 +26,7 @@ ADA_EMAIL = "ada.okafor@kestrelgeneral.ng"
 
 def verified_call(client, phone="+2348000000102") -> str:
     call = client.post("/api/voice/calls", json={"direction": "inbound", "phone_e164": phone}, headers=WORKER).json()["call"]
-    assert client.post(f"/api/voice/calls/{call['id']}/verify-pin", json={"phone_e164": phone, "pin": "1234"}, headers=WORKER).json()["ok"]
+    assert call["known"]  # known by the number on file, no PIN
     return call["id"]
 
 

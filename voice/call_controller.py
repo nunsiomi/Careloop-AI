@@ -47,7 +47,7 @@ END_STATES = {CallState.COMPLETED, CallState.DISCONNECTED, CallState.UNVERIFIED,
 _NEXT = {
     CallState.NEW: {CallState.RINGING, CallState.ANSWERED},
     CallState.RINGING: {CallState.ANSWERED},
-    # Browser voice skips the PIN: the patient already signed in to the app.
+    # No PIN (decided by Nunsi, 5 Nov 2026): a known caller goes straight to VERIFIED; an unknown one to the menu.
     CallState.ANSWERED: {CallState.MENU, CallState.VERIFICATION_GATE, CallState.VERIFIED},
     CallState.MENU: {CallState.VERIFICATION_GATE, CallState.LISTENING},
     CallState.VERIFICATION_GATE: {CallState.VERIFIED},
@@ -67,8 +67,6 @@ LANGUAGE_DIGITS = {"1": "ha", "2": "yo", "3": "ig", "4": "en"}
 LANGUAGE_NAMES = {"ha": "Hausa", "yo": "Yoruba", "ig": "Igbo", "en": "English"}
 NAME_TO_CODE = {name.lower(): code for code, name in LANGUAGE_NAMES.items()}
 
-PIN_LENGTH = 4
-MAX_PIN_TRIES = 5  # Same limit as PIN sign-in in the app (docs/api_shapes.md).
 MAX_MENU_REPEATS = 3
 
 
@@ -99,7 +97,6 @@ class CallController:
     state: CallState = CallState.NEW
     language: str | None = None
     patient_id: str | None = None
-    pin_tries: int = 0
     menu_repeats: int = 0
     escalated: bool = False
     log: list[dict] = field(default_factory=list)
@@ -135,30 +132,14 @@ class CallController:
         self.menu_repeats += 1
         return self.menu_repeats >= MAX_MENU_REPEATS
 
-    def pin_result(self, ok: bool, patient_id: str | None = None, tries_left: int | None = None) -> str:
-        """Record a PIN check. Returns 'verified', 'retry' or 'locked'.
-
-        The backend decides; `tries_left` from the backend wins over the local count, so the call and the
-        app share one lock.
-        """
-        if ok and patient_id:
-            self.patient_id = patient_id
-            self.to(CallState.VERIFIED)
-            return "verified"
-        self.pin_tries += 1
-        left = tries_left if tries_left is not None else MAX_PIN_TRIES - self.pin_tries
-        if left <= 0:
-            self.to(CallState.UNVERIFIED, "PIN tries used up")
-            return "locked"
-        return "retry"
-
     def outcome(self) -> str:
         if self.escalated:
             return "escalated"
         if self.state == CallState.UNVERIFIED:
             return "unverified"
         if not self.verified:
-            return "not_reached"
+            # An incoming call from a number not on file still talked to Tomi about CareLoop.
+            return "unknown_caller" if self.direction == "inbound" else "not_reached"
         return "completed"
 
 

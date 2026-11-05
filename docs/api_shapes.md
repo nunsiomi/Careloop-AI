@@ -170,7 +170,7 @@ Error rules: sign-in and reset responses must not reveal whether an account exis
 - Codes are 6 digits, valid 300 s, resend after 60 s, 5 wrong tries per code. Delivery `via` is `email` (the default), `sms` (Termii text message) or `voice` (a phone call reads the code out; Termii Voice Call). `sms` and `voice` answer 503 until Termii is configured, and only numbers on an account or an invite are texted or called.
 - Phone sign-in sends the code to the email address on the account and never shows that address (`masked_email` is null), so the screen cannot reveal whether a number has an account. With no email on file nothing is sent; the person can choose a call instead.
 - Invites ask for the person's own `email`; it is saved to the patient or caregiver once the code is verified, and `masked_email` echoes it back.
-- The PIN is 4 digits. It is the same PIN Tomi asks for on phone calls. 5 wrong PINs locks PIN sign-in until a code is used.
+- The PIN is 4 digits, any 4 digits (simple PINs are allowed). It opens the app on a remembered phone; phone calls have no PIN. 5 wrong PINs locks PIN sign-in until a code is used.
 - The app locks after `idle_lock_minutes` (10) without activity.
 - Phone numbers can be from any country. The app sends `phone` as `+<country code> <number as typed>` (for example `+234 0803 123 4567` or `+44 7400 123456`); a number typed without `+` is read as Nigerian. The backend normalises to E.164 and drops a leading trunk `0` after the country code.
 
@@ -276,7 +276,7 @@ The mock adds `demo_code` to challenges, `demo_link` to reset responses and `dem
 
 ## Browser voice (Tomi)
 
-In the real system, `createVoiceSession` returns a short-lived LiveKit token. The browser joins the room, and the Tomi worker (`voice/tomi_agent.py`) handles audio, Spitch speech-to-text and text-to-speech, and turn-taking. The patient is already signed in, so browser voice has no PIN check (phone calls do). Turns reach the backend as normalized voice events (doc section 22.2).
+In the real system, `createVoiceSession` returns a short-lived LiveKit token. The browser joins the room, and the Tomi worker (`voice/tomi_agent.py`) handles audio, Spitch speech-to-text and text-to-speech, and turn-taking. The patient is already signed in, so browser voice has no PIN check. Phone calls have none either (decided by Nunsi, 5 Nov 2026): a number on file is enough. Turns reach the backend as normalized voice events (doc section 22.2).
 
 Until the backend exists, `frontend/api/voice/sessions.js` issues that token: a Vercel function on the preview, served by Vite during `npm run dev`. It needs `LIVEKIT_URL`, `LIVEKIT_API_KEY` and `LIVEKIT_API_SECRET` (root `.env` locally, Vercel project settings on the preview) and answers `503` without them. The token asks LiveKit to dispatch the agent `tomi` with job metadata `{ "patient_id", "language" }`. Body: `{ patient_id, language }`. Response: `{ session: { id, mode: "livekit", url, token, language } }`. The backend's own `POST /voice/sessions` issues the same token after checking the patient's session; this stand-in does not.
 
@@ -294,15 +294,15 @@ Outgoing calls: `POST /calls/outbound` dispatches the LiveKit agent `tomi` with 
 
 | Route | Request body | Response |
 |---|---|---|
-| `POST /voice/calls` | `{ direction, phone_e164?, patient_id? }` | `{ call: { id, language } }`; `language` is set only for outbound calls |
-| `POST /voice/calls/{id}/verify-pin` | `{ phone_e164, pin }` | `{ ok: true, patient_id }` or `{ ok: false, tries_left }`. The same answer for an unknown number and a wrong PIN; shares the app's 5-try lock |
-| `GET /voice/calls/{id}/context` | | `{ context: { patient: { id, first_name, language, timezone }, consent: { voice }, facility, plan, tasks[], opening } }`; 403 until the PIN is verified. `plan` is the approved plan only. `opening` is an approved line in the patient's language, or null |
-| `POST /voice/calls/{id}/turns/check` | `{ text, language, confidence? }` | `{ action: "continue" }`, `{ action: "clarify" }` (unclear speech: ask again) or `{ action: "escalate", escalation }`. Runs the safety rules; an escalation is opened before it answers. The worker sends `confidence: 0.4` for a transcript it judges unclear (Spitch gives no score) |
+| `POST /voice/calls` | `{ direction, phone_e164?, patient_id? }` | `{ call: { id, language, patient_id, known } }`. No PIN: an incoming number on file (the patient's or a caregiver's) is `known: true` with the patient's language; an outbound call is to the number on the record. An unknown number is `known: false`, and Tomi only tells it about CareLoop |
+| `GET /voice/calls/{id}/context` | | `{ context: { patient: { id, first_name, language, timezone }, caller: { kind: "patient" } \| { kind: "caregiver", first_name, relation }, consent: { voice }, facility, plan, today[], tasks[], opening } }`; 403 for an unknown caller. `plan` is the approved plan only. `opening` is an approved line in the patient's language, or null |
+| `POST /voice/calls/{id}/medicine` | `{ name }` | What a medicine **on the caller's plan** is generally used for: `{ found, name, generally_used_for, source, note }` from MedlinePlus, no doses. A medicine not on the plan is `{ found: false, note }`; 403 for an unknown caller |
+| `POST /voice/calls/{id}/turns/check` | `{ text, language, confidence? }` | `{ action: "continue" }`, `{ action: "clarify" }` (unclear speech: ask again) or `{ action: "escalate", escalation }`. Runs the safety rules; an escalation is opened before it answers. For an unknown caller a red flag is `{ action: "escalate", escalation: null }` (the emergency line, no record). The worker sends `confidence: 0.4` for a transcript it judges unclear (Spitch gives no score) |
 | `POST /voice/calls/{id}/turns` | `{ speaker: "tomi" \| "patient", transcript, language }` | `{}`; text only, no audio |
 | `POST /voice/calls/{id}/task-updates` | `{ task_id, status: "done" \| "not_done" \| "unable", original_text }` | `{ ok }`; recorded as `patient_reported` after the patient confirmed it |
 | `POST /voice/calls/{id}/barriers` | `{ type: "cost" \| "transport" \| "distance" \| "stock" \| "no_helper" \| "other", original_text, task_id? }` | `{ ok }` |
 | `POST /voice/calls/{id}/questions` | `{ original_text }` | `{ ok }`; shows on the dashboard for the care team |
-| `POST /voice/calls/{id}/end` | `{ outcome: "completed" \| "escalated" \| "unverified" \| "not_reached", states[] }` | `{}` |
+| `POST /voice/calls/{id}/end` | `{ outcome: "completed" \| "escalated" \| "unverified" \| "not_reached" \| "unknown_caller", states[] }` | `{}` |
 
 ## Demo-only endpoints
 
@@ -316,15 +316,23 @@ The UI shows these only while mocks are on:
 
 ## Care-team assistant
 
-A panel in the dashboard where a clinician types or speaks (browser speech-to-text, `en-NG`) an instruction about one
-of their patients. The backend **Clinician Assistant Agent** turns it into proposed changes; nothing is saved until the
+A panel in the dashboard where a clinician types or speaks (browser speech-to-text, `en-NG`) a question or an instruction.
+
+**Questions** (and pasted reports to explain) come back as `mode: "answer"` with the answer in `reply`, `actions: []`,
+and nothing changed. The agent reads every patient in the clinician's facility (status, tasks, problems, escalations,
+next visit, medicines, last contact) and, for a named or selected patient, the whole record. It looks medicines up
+(uses, warnings, interactions) in MedlinePlus and US FDA drug labels only, never the open web, and names the source.
+`history` (the last few `{ role: "user" | "assistant", content }` turns) lets a follow-up such as "and her visits?" make
+sense. Without a model it answers with counts from the record.
+
+**Instructions** come back as `mode: "draft"`. The backend **Clinician Assistant Agent** turns it into proposed changes; nothing is saved until the
 clinician confirms. The agent only uses what the clinician said: it never adds a medicine, dose, time or place they did
 not give, and flags anything missing as an `issue`. Changes the patient has not consented to (texts, calls) come back
 `blocked` and are skipped on apply. Every applied change is logged as a `clinician_verified` event under the clinician's name.
 
 | `CareLoopAPI` method | HTTP | Request body | Response |
 |---|---|---|---|
-| `draftAssistantActions(body)` | `POST /assistant/drafts` | `{ text, patient_id? }` | `{ draft: { instruction, patient, reply, needs_patient, choices?, actions[], templates[] } }` |
+| `draftAssistantActions(body)` | `POST /assistant/drafts` | `{ text, patient_id?, history? }` | `{ draft: { instruction, mode: "answer" \| "draft", patient, reply, needs_patient, choices?, actions[], templates[] } }` |
 | `applyAssistantActions(body)` | `POST /assistant/apply` | `{ patient_id, actions[], by }` | `{ results: [{ id, kind, ok, summary }], patient }` |
 
 Without `patient_id` the agent looks for a patient's name in the text; if none, `needs_patient: true` with `choices`.

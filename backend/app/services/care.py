@@ -112,7 +112,8 @@ def classify(text: str) -> dict:
     for kind, terms in BARRIER_TERMS.items():
         if any(term in lower for term in terms):
             return {"kind": "barrier", "type": kind}
-    if re.search(r"(appointment|visit|reschedule|new time|change.*time)", lower):
+    if re.search(r"(reschedul|new time|another (day|time)|change.*(time|date|day|visit|appointment)|move (my|the|it)|"
+                 r"(can'?t|cannot|won'?t be able to) (make|come|go|attend))", lower):
         return {"kind": "reschedule"}
     if re.match(r"^(done|yes|i took|took it|i have taken|eh|bẹ́ẹ̀ni|ee)", lower) or "took" in lower:
         return {"kind": "done"}

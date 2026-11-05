@@ -136,7 +136,7 @@ def build() -> dict[str, list[dict]]:
         ev("p-zainab", at(-3, "08:30"), "agent", "Care Plan Agent", "system", "plan_drafted", "Plan drafted from discharge note. 1 dose line flagged.", "system_recorded"),
         ev("p-zainab", at(-3, "08:45"), "clinician", REVIEWER, "dashboard", "plan_approved", "Plan corrected and approved.", "clinician_verified"),
         ev("p-zainab", at(-3, "09:00"), "patient", "Zainab Musa", "clinic", "consent_recorded", "Agreed at the clinic to phone calls, email and chat in the app. PIN set.", "clinician_verified"),
-        ev("p-zainab", at(-1, "09:15"), "system", "Scheduler", "voice", "call_answered", "Reminder call answered. Identity verified by PIN.", "provider_status"),
+        ev("p-zainab", at(-1, "09:15"), "system", "Scheduler", "voice", "call_answered", "Reminder call answered on the number on her record.", "provider_status"),
         ev("p-zainab", at(-1, "09:17"), "patient", "Zainab Musa", "voice", "task_reported", "Morning medicine reported as taken.", "self_reported"),
         ev("p-zainab", at(-1, "09:17"), "patient", "Zainab Musa", "voice", "barrier_opened", "Could not get the evening medicine.", "self_reported"),
         ev("p-zainab", at(-1, "09:18"), "agent", "Barrier Resolution Agent", "voice", "barrier_option_offered", "Possible pharmacy contact shared. Barrier not resolved.", "system_recorded"),
@@ -157,12 +157,10 @@ def build() -> dict[str, list[dict]]:
 
     def turn(speaker, transcript, english=None, confidence=None, confirmed=None, keypad=None):
         return {"speaker": speaker, "transcript": transcript, "english": english, "confidence": confidence, "confirmed": confirmed, "keypad": keypad}
-    greeting = "Hello, this is Tomi, an automated assistant from your care team."
     calls = [
         {"id": "c-1", "patient_id": "p-zainab", "direction": "outbound", "channel": "phone", "status": "completed", "verification_state": "verified", "language": "Hausa",
          "started_at": at(-1, "09:15"), "ended_at": at(-1, "09:19"), "outcome": "Task reported, barrier opened", "turns": [
-            turn("tomi", f"{greeting} To keep your details private, please enter your PIN."), turn("patient", "PIN entered", keypad=True, confirmed=True),
-            turn("tomi", "Thank you, Zainab. Your morning medicine was due at 08:00. Did you take it?"),
+            turn("tomi", f"Hello Zainab, this is Tomi, an automated assistant from CareLoop. Your morning medicine was due at 08:00. Did you take it?"),
             turn("patient", "Na sha na safe, amma ban samu ɗayan maganin ba.", "I took the morning one but could not get the other medicine.", 0.86),
             turn("tomi", "I heard that you took the morning medicine, and you could not get the evening medicine. Is that right?"),
             turn("patient", "Eh.", "Yes.", 0.95, True),
@@ -171,7 +169,7 @@ def build() -> dict[str, list[dict]]:
          "started_at": at(0, "08:05"), "ended_at": at(0, "08:06"), "outcome": "No answer", "turns": []},
         {"id": "c-3", "patient_id": "p-zainab", "direction": "inbound", "channel": "phone", "status": "completed", "verification_state": "verified", "language": "Hausa",
          "started_at": at(0, "09:18"), "ended_at": at(0, "09:25"), "outcome": "Reschedule requested, escalation created", "turns": [
-            turn("tomi", f"{greeting} Please enter your PIN."), turn("patient", "PIN entered", keypad=True, confirmed=True),
+            turn("tomi", "Hello Zainab, this is Tomi, an automated assistant from CareLoop. How can I help you today?"),
             turn("patient", "Ba zan iya biyan kuɗin mota ranar ba.", "I cannot pay for transport on that day.", 0.81),
             turn("tomi", "I can ask the clinic for a new time. Your current visit stays booked until the clinic confirms. Shall I ask?"),
             turn("patient", "Eh.", "Yes.", 0.94, True),

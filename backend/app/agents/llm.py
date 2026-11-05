@@ -35,3 +35,31 @@ async def ask_groq_json(system_prompt: str, user_content: str) -> dict[str, Any]
     if not isinstance(data, dict):
         raise ValueError("model did not return a JSON object")
     return data
+
+
+async def ask_groq_with_tools(system_prompt: str, messages: list[dict], tools: list[dict], handlers: dict[str, Any],
+                              rounds: int = 3, temperature: float = 0.2) -> str:
+    """A conversation in which the model may call our tools (handlers: name -> async function returning a dict).
+    Returns the model's final text. Raises ValueError or groq.GroqError like ask_groq_json."""
+    conversation = [{"role": "system", "content": system_prompt}, *messages]
+    for round_number in range(rounds):
+        last = round_number == rounds - 1  # the last round must answer with what it has
+        response = await groq_client().chat.completions.create(
+            model=model(), messages=conversation, tools=tools, tool_choice="none" if last else "auto", temperature=temperature)
+        message = response.choices[0].message
+        if not message.tool_calls:
+            return (message.content or "").strip()
+        conversation.append({"role": "assistant", "content": message.content or "",
+                             "tool_calls": [{"id": call.id, "type": "function", "function": {"name": call.function.name, "arguments": call.function.arguments}}
+                                            for call in message.tool_calls]})
+        for call in message.tool_calls:
+            handler = handlers.get(call.function.name)
+            try:
+                arguments = json.loads(call.function.arguments or "{}")
+                result = await handler(**arguments) if handler else {"error": "No such tool."}
+            except (TypeError, ValueError) as error:
+                result = {"error": f"Bad arguments: {error}"}
+            if result is None:
+                result = {"error": "Not available right now. Say you could not check it."}
+            conversation.append({"role": "tool", "tool_call_id": call.id, "content": json.dumps(result, ensure_ascii=False)})
+    raise ValueError("model kept calling tools without answering")

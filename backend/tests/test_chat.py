@@ -128,7 +128,6 @@ def test_overdue_critical_task_raises_one_amber_escalation(client):
 def test_worker_turn_with_a_negated_flag_continues(client):
     headers = {"Authorization": "Bearer test-worker-token"}
     call = client.post("/api/voice/calls", json={"direction": "inbound", "phone_e164": "+2348000000101"}, headers=headers).json()["call"]
-    client.post(f"/api/voice/calls/{call['id']}/verify-pin", json={"phone_e164": "+2348000000101", "pin": "1234"}, headers=headers)
     result = client.post(f"/api/voice/calls/{call['id']}/turns/check", json={"text": "I have no chest pain", "language": "en"}, headers=headers).json()
     assert result == {"action": "continue"}
 
@@ -136,7 +135,6 @@ def test_worker_turn_with_a_negated_flag_continues(client):
 def test_worker_unclear_turn_is_clarified_unless_it_holds_a_danger_word(client):
     headers = {"Authorization": "Bearer test-worker-token"}
     call = client.post("/api/voice/calls", json={"direction": "inbound", "phone_e164": "+2348000000101"}, headers=headers).json()["call"]
-    client.post(f"/api/voice/calls/{call['id']}/verify-pin", json={"phone_e164": "+2348000000101", "pin": "1234"}, headers=headers)
     check = lambda text: client.post(f"/api/voice/calls/{call['id']}/turns/check", json={"text": text, "language": "ha", "confidence": 0.4}, headers=headers).json()
     assert check("mm ba") == {"action": "clarify"}
     assert check("mm kirji ba")["action"] == "escalate"

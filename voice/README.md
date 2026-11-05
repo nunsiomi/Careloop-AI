@@ -6,22 +6,23 @@ and English, and Groq for replies. It started from [Tech-sis123/agricall](https:
 
 | File | What it does |
 |---|---|
-| `tomi_agent.py` | The worker: language menu, PIN check, safety check on every turn, check-in conversation |
-| `call_controller.py` | Call states (section 7.3 of the project documentation), keypad input, PIN tries |
+| `tomi_agent.py` | The worker: caller recognised by number, language menu for unknown numbers, safety check on every turn, the conversation |
+| `call_controller.py` | Call states (section 7.3 of the project documentation), keypad input |
 | `backend_client.py` | Calls to the CareLoop backend, plus a mock with the sample patient Zainab |
 | `prompts/lines.json` | Tomi's fixed lines in four languages (Hausa, Yoruba and Igbo still need a native-speaker check) |
 | `test_voice.py` | Tests that run without any keys: `python -m pytest voice` |
 
 ## How a call goes
 
-1. **Greeting and language menu.** Tomi says who she is, then reads the language options, each in its own
-   language: 1 Hausa, 2 Yoruba, 3 Igbo, 4 English. On an outgoing call she already knows the patient's language
-   and skips the menu.
-2. **PIN.** The patient types their 4-digit CareLoop PIN (the same PIN as the app). An unknown number and a wrong
-   PIN get the same answer, and 5 wrong PINs lock it. Nothing about the patient's care is said before this.
-   Browser voice skips the PIN, because the patient has already signed in to the app.
-3. **Check-in.** Tomi loads the approved plan from the backend and asks how the patient is getting on. She may
-   only use what is in the plan; any medical question goes to the care team.
+1. **Who is calling.** There is no PIN (decided by Nunsi, 5 Nov 2026). If the number is on file (the patient's,
+   or a caregiver's), Tomi greets them by name in their language. On an outgoing call she rang the number on the
+   record. In the app, the patient is already signed in.
+2. **Unknown numbers.** Tomi reads the language options, each in its own language (1 Hausa, 2 Yoruba, 3 Igbo,
+   4 English), then explains what CareLoop is and how to join through their care team. She says nothing about
+   anyone's care.
+3. **The conversation.** Tomi loads the approved plan and talks freely: how they feel, what to take today, when
+   the next visit is. She can say what a medicine on their plan is generally for (MedlinePlus, through the
+   backend), records what they did after they confirm it, and passes anything medical to the care team.
 4. **Safety on every turn.** Each thing the patient says goes to the backend's safety check before the model
    sees it. A red flag skips the model: Tomi plays the emergency line, the backend opens an escalation, and Tomi
    repeats that line for the rest of the call.
@@ -56,7 +57,7 @@ python -m venv .venv
 .venv\Scripts\activate          # macOS/Linux: source .venv/bin/activate
 pip install -r requirements.txt
 
-python tomi_agent.py console    # talk to Tomi with your computer's microphone (as Zainab, no PIN)
+python tomi_agent.py console    # talk to Tomi with your computer's microphone (as Zainab)
 python tomi_agent.py dev        # connect the worker to your LiveKit project, ready for calls
 python dial.py +2348031234567   # with dev running: Tomi rings that phone (needs a SIP trunk)
 ```
@@ -67,7 +68,7 @@ your own number so calls to and from it count as Zainab's.
 
 `console` and the Playground use the sample patient Zainab (Hausa) while `VOICE_USE_MOCKS=1`. To test in another
 language, set `TOMI_TEST_LANGUAGE` in `.env` to `en`, `yo` or `ig`. Phone calls need a
-SIP trunk: dial in, choose a language, and type PIN `1234` from `+2348000000101` (the sample number).
+SIP trunk: dial in from `+2348000000101` (the sample number) and Tomi greets you as Zainab; any other number hears about CareLoop.
 
 ## Talk to Tomi in the app (browser voice, free)
 

@@ -5,6 +5,7 @@ the patient has not agreed to. This is the rules-based stand-in ported from the 
 drafting step can replace `draft_action` later without changing the contract (docs/api_shapes.md).
 """
 
+import logging
 import os
 import re
 from datetime import datetime, timedelta
@@ -14,10 +15,11 @@ from groq import GroqError
 from app.agents import assistant as assistant_agent
 from app.db import store
 from app.safety import number_check
-from app.services import care, notifications, outbox, voice
+from app.services import briefs, care, drug_info, notifications, outbox, voice
 from app.services.activity_log import log_event
 from app.util import ApiError, first_name, iso, make_id, now
 
+log = logging.getLogger("careloop.assistant")
 WEEKDAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
 MONTHS = ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december"]
 NUMBER_WORDS = {"a": 1, "an": 1, "one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10, "fourteen": 14, "thirty": 30}
@@ -27,6 +29,10 @@ VISIT_WORDS = re.compile(r"\b(book|appointment|visit|review|follow-?up|clinic|wo
 TEXT_WORDS = re.compile(r"\b(text|sms|e-?mail|send (?:her|him|them)?\s*a message|message (?:her|him|them))\b")
 CALL_WORDS = re.compile(r"\b(call|ring|phone)\b")
 ASSISTANT_TEMPLATES = ["medicine", "visit", "call_clinic"]
+# A question or a request to explain, not an instruction to change a record (decided by Nunsi, 5 Nov 2026).
+QUESTION_START = re.compile(r"^\s*(who|what|which|when|where|why|how|is|are|was|were|does|do|did|has|have|tell me|show me|list|summari[sz]e|"
+                            r"explain|compare|give me|any|look up|check (?:if|whether|for)|interpret|what's|whats)\b", re.I)
+CHANGE_WORDS = re.compile(r"(book|add|schedule|text|sms|send|call|ring|remind|note|change|move|cancel|set|start|stop|prescribe|put)$", re.I)
 
 
 def _number(word: str) -> int:
@@ -184,6 +190,70 @@ def draft_action(clause: str, patient: dict) -> dict:
     return {"id": action_id, "kind": "note", "text": _cap(clause), "issues": []}
 
 
+def is_question(text: str) -> bool:
+    """Questions and pasted reports get an answer; instructions get a draft. "Can you book..." is an instruction."""
+    instruction = text.strip()
+    if len(instruction) > 400:
+        return True  # a pasted note or report to explain
+    opening = re.sub(r"^\s*(please|pls|kindly|can you|could you|would you|will you)\s+", "", instruction, flags=re.I)
+    if CHANGE_WORDS.match(opening.split(" ", 1)[0].strip(",.:") if opening else ""):
+        return False
+    return bool(QUESTION_START.match(opening)) or instruction.endswith("?")
+
+
+def _plural(count: int, word: str) -> str:
+    return f"{count} {word}{'' if count == 1 else 's'}"
+
+
+def _rules_answer(patient: dict | None, facility: str) -> str:
+    """Without a model: a plain summary from the record, never a guess."""
+    if patient:
+        brief = briefs.staff_brief(patient)
+        counts = brief["task_counts"]
+        medicines = ", ".join(item["name"] for item in (brief["plan"] or {}).get("medicines", [])) or "none on the plan"
+        visit = brief["upcoming_visits"][0] if brief["upcoming_visits"] else None
+        escalations = sum(item["status"] != "resolved" for item in brief["escalations"])
+        next_visit = f"Next visit: {visit['what']}, {visit['when']}." if visit else "No visit booked."
+        return (f"{patient['name']}: {counts['done']} tasks done, {counts['due']} due and {counts['missed']} missed. "
+                f"Medicines: {medicines}. {next_visit} {_plural(escalations, 'open escalation')}.")
+    rows = sorted(briefs.facility_overview(facility),
+                  key=lambda row: (-row["open_escalations"], -row["overdue_high_importance"], -row["open_problems"], -row["tasks"]["missed"]))
+    flagged = []
+    for row in rows:
+        reasons = [_plural(row["open_escalations"], "open escalation") if row["open_escalations"] else "",
+                   _plural(row["overdue_high_importance"], "overdue high-importance task") if row["overdue_high_importance"] else "",
+                   _plural(row["open_problems"], "open problem") if row["open_problems"] else "",
+                   f"{row['tasks']['missed']} missed" if row["tasks"]["missed"] else ""]
+        reasons = [reason for reason in reasons if reason]
+        if reasons:
+            flagged.append(f"{row['name']} ({', '.join(reasons)})")
+    if not flagged:
+        return "No patient has an open escalation, an overdue task or an open problem right now."
+    return "Needing attention: " + "; ".join(flagged[:6]) + "."
+
+
+async def answer_with_model(text: str, patient: dict | None, facility: str, history: list[dict] | None = None) -> dict:
+    """An answer about the facility's patients, a pasted report or a medicine. Nothing is changed."""
+    reply = None
+    if os.getenv("GROQ_API_KEY"):
+        async def look_up_medicine(name: str = "") -> dict:
+            return drug_info.for_care_team(await drug_info.look_up(name))
+        turns = [{"role": item["role"], "content": str(item["content"])[:2000]} for item in (history or [])[-6:]
+                 if isinstance(item, dict) and item.get("role") in ("user", "assistant") and item.get("content")]
+        try:
+            reply = await assistant_agent.answer({"question": text, "today": _local_now().strftime("%A %d %B %Y, %H:%M"),
+                                                  "facility_patients": briefs.facility_overview(facility),
+                                                  "patient": briefs.staff_brief(patient) if patient else None, "history": turns}, look_up_medicine)
+        except (ValueError, GroqError) as error:
+            log.warning("Assistant answer unavailable: %s", error)
+    return {"instruction": text, "mode": "answer", "patient": _patient_view(patient) if patient else None, "needs_patient": False,
+            "reply": reply or _rules_answer(patient, facility), "actions": [], "templates": []}
+
+
+def _patient_view(patient: dict) -> dict:
+    return {"id": patient["id"], "name": patient["name"], "language": patient["language"], "channels": patient.get("channels", [])}
+
+
 def template_options(patient: dict) -> list[dict]:
     return [{"id": template, "title": notifications.TEMPLATES[template][0], "body": notifications.render(template, patient, "sms")[1]} for template in ASSISTANT_TEMPLATES]
 
@@ -211,10 +281,10 @@ def draft(text: str, patient_id: str | None, facility: str) -> dict:
     else:
         patient = mentioned_patient(instruction, facility)
     if not patient:
-        return {"instruction": instruction, "patient": None, "reply": "Which patient is this for? Choose one and I will draft the changes.", "needs_patient": True,
+        return {"instruction": instruction, "mode": "draft", "patient": None, "reply": "Which patient is this for? Choose one and I will draft the changes.", "needs_patient": True,
                 "choices": [{"id": item["id"], "name": item["name"]} for item in store().where("patients", facility=facility)], "actions": []}
     actions = [draft_action(clause, patient) for clause in split_instruction(instruction)]
-    return {"instruction": instruction, "patient": {"id": patient["id"], "name": patient["name"], "language": patient["language"], "channels": patient.get("channels", [])},
+    return {"instruction": instruction, "mode": "draft", "patient": _patient_view(patient),
             "reply": draft_reply(patient, actions), "needs_patient": False, "actions": actions, "templates": template_options(patient)}
 
 
@@ -401,8 +471,15 @@ def _checked(action: dict, instruction: str, patient: dict) -> dict:
     return checked
 
 
-async def draft_with_model(text: str, patient_id: str | None, facility: str) -> dict:
-    """The model's proposal, checked field by field; the rules-based draft when the model is not available."""
+async def draft_with_model(text: str, patient_id: str | None, facility: str, history: list[dict] | None = None) -> dict:
+    """A question gets an answer; an instruction gets the model's proposal, checked field by field (the rules-based
+    draft when the model is not available)."""
+    instruction = str(text or "").strip()
+    if instruction and is_question(instruction):
+        patient = store().first("patients", id=patient_id, facility=facility) if patient_id else mentioned_patient(instruction, facility)
+        if patient_id and not patient:
+            raise ApiError("Patient was not found.", 404)
+        return await answer_with_model(instruction, patient, facility, history)
     base = draft(text, patient_id, facility)
     if base["needs_patient"] or not os.getenv("GROQ_API_KEY"):
         return base

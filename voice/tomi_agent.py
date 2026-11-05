@@ -3,13 +3,15 @@
 Started from voice.py in github.com/Tech-sis123/agricall (keypad language menu, LiveKit SIP and DTMF
 handling), used with Tech-sis123's permission.
 
-One worker handles three kinds of session:
-- inbound phone call: language menu by keypad, then the CareLoop PIN, then the check-in;
-- outbound phone call: the backend dispatches the worker with the patient and the number to ring;
-- browser voice: the patient is already signed in to the app, so there is no PIN.
+One worker handles three kinds of session. There is no PIN on any of them (decided by Nunsi, 5 Nov 2026):
+- inbound phone call: a number on file (the patient's, or a caregiver's) is enough. Tomi greets them by name
+  in their language and talks freely about their plan. An unknown number chooses a language by keypad and
+  hears what CareLoop is and how to join; nothing about anyone's care is said to it;
+- outbound phone call: the backend dispatches the worker with the patient and the number on their record;
+- browser voice: the patient is already signed in to the app.
 
-Nothing about a patient's care is said before the PIN check. Every patient turn goes through the backend's
-safety check before Tomi replies; a red flag skips the model and plays the approved emergency line.
+Every caller turn goes through the backend's safety check before Tomi replies; a red flag skips the model and
+plays the approved emergency line.
 
 Run:  python tomi_agent.py console   (talk to Tomi in this terminal, mock patient Zainab)
       python tomi_agent.py dev       (joins your LiveKit Cloud project; then `python dial.py +234...` rings a phone)
@@ -49,7 +51,6 @@ from call_controller import (
     LANGUAGE_DIGITS,
     LANGUAGE_NAMES,
     MAX_MENU_REPEATS,
-    PIN_LENGTH,
     CallController,
     CallState,
     Keypad,
@@ -76,7 +77,6 @@ VOICES = {
 GROQ_MODEL = os.getenv("GROQ_MODEL") or "openai/gpt-oss-120b"
 
 MENU_WAIT = 10  # seconds to wait for a key after the menu, before repeating it
-PIN_WAIT = 15
 
 
 def line(lang: str, key: str, **values: str) -> str:
@@ -132,38 +132,71 @@ async def wait_for_key(keypad: Keypad, speeches: list, timeout: float) -> str | 
 
 def build_instructions(context: dict, lang: str) -> str:
     patient = context["patient"]
+    caller = context.get("caller") or {"kind": "patient"}
     now = local_now(patient.get("timezone"))
-    care = {"plan": context["plan"], "tasks": context["tasks"], "facility": context.get("facility")}
-    return f"""You are Tomi, CareLoop's automated follow-up assistant, on a call with {patient['first_name']}, who has
-gone home after care at {context.get('facility') or 'their care facility'}. You are not a doctor or nurse and you
-say so if asked.
+    care = {"plan": context["plan"], "today": context.get("today"), "tasks": context["tasks"], "facility": context.get("facility")}
+    talking_to = (f"{caller['first_name']}, who helps {patient['first_name']} ({caller.get('relation') or 'family'}). Talk about "
+                  f"{patient['first_name']}'s plan with them" if caller["kind"] == "caregiver" else patient["first_name"])
+    return f"""You are Tomi, CareLoop's health assistant, on a phone call with {talking_to}. {patient['first_name']} has gone home
+after care at {context.get('facility') or 'their care facility'}, and you are here to help them stay well and keep to
+their care plan. You are warm, patient and encouraging, like a kind nurse's helper who has time to talk. You are
+not a doctor or nurse and you say so if asked.
 
-Language: speak only {LANGUAGE_NAMES[lang]}, with correct spelling and tone marks. Keep each reply to one or two
-short sentences, in plain words for someone who may not read well. Ask one question at a time.
+Language: speak only {LANGUAGE_NAMES[lang]}, with correct spelling and tone marks. This is a phone call: keep each
+reply to one to three short spoken sentences, in plain words for someone who may not read well. No lists.
 
-What you may talk about is limited to the approved care plan and tasks below. Say medicine names, doses, times,
-places and dates exactly as they are written there. Never add, change or guess a medicine, dose, time, place,
-date, diagnosis or test result, and never say what a symptom means. If the patient asks anything the plan does
-not answer, including any medical question, say you will pass it to their care team and call ask_care_team.
-
-Your job on this call: check how the patient is getting on with today's tasks and upcoming visits and tests.
-- When the patient says they did or did not do a task, repeat back what you understood and ask them to confirm.
-  Only after they confirm, call record_task_update with their own words.
+What you can do:
+- Have a real conversation. Ask how they are feeling, listen, and respond kindly to what they say.
+- Answer any question about their own plan: what to take today and when, how long a medicine is for, what the
+  instructions say, when and where the next visit or test is. Say medicine names, doses, times, places and dates
+  exactly as written in the plan below. When you repeat the plan, say "your plan says", never "you should".
+- When they ask what a medicine on their plan is for, call look_up_medicine and explain the answer in one or two
+  plain sentences, then say their care team chose it for them and can tell them more. Never answer that from memory.
+- When they say they did or did not do a task, repeat back what you understood and ask them to confirm. Only after
+  they confirm, call record_task_update with their own words.
 - If something stops them (cost, transport, distance, medicine out of stock, no one to help), call report_problem.
   Do not promise that a problem will be solved.
-- Never tell the patient an ambulance or emergency service is coming.
-- When the patient is done, or asks to stop, say goodbye briefly and call end_call.
+- Pass anything else to their care team with ask_care_team and tell them someone will get back to them: side
+  effects, whether they can take another medicine, changing or stopping a medicine, what a symptom means, test
+  results, or anything the plan does not answer.
 
-It is {now.strftime('%A %d %B %Y, %H:%M')} where the patient is.
+Never add, change or guess a medicine, dose, time, place, date, diagnosis or test result. Never tell them to stop,
+skip, double or change a medicine, never say what a symptom means or that it is nothing to worry about, and never
+say an ambulance or emergency service is coming. When they are done, or ask to stop, say goodbye warmly and call
+end_call.
 
-Approved care plan and tasks (JSON):
+It is {now.strftime('%A %d %B %Y, %H:%M')} where they are.
+
+Their approved care plan, today's tasks and open tasks (JSON):
 {json.dumps(care, ensure_ascii=False)}"""
 
 
-class TomiAgent(Agent):
-    def __init__(self, *, controller: CallController, backend: Backend, voices: Voices, context: dict, lang: str) -> None:
+def guide_instructions(lang: str) -> str:
+    return f"""You are Tomi, CareLoop's health assistant, answering a phone call from a number that is not linked to
+anyone in CareLoop. You know nothing about this caller's health and you must not ask for or guess any.
+
+Language: speak only {LANGUAGE_NAMES[lang]}, with correct spelling and tone marks. One to three short spoken
+sentences per reply, plain words, no lists.
+
+What to tell them, warmly and in your own words, answering what they ask:
+- CareLoop helps people after they leave a care facility (a hospital, clinic, pharmacy or care home) to keep to the
+  care plan their care team made: reminders for medicines, tests and visits, a chat in an app, and calls from
+  Tomi in Hausa, Yoruba, Igbo or English.
+- To join, they ask their care team. The care facility adds them and gives them an invite code.
+- If they already use CareLoop but are calling from another phone, they should call from the phone number their
+  care team has on file, or ask their care team to update it.
+- You cannot see or discuss anyone's care on this call, and you do not give medical advice.
+- If they feel very unwell, they should go to the nearest hospital now.
+
+When they are done, say goodbye warmly and call end_call."""
+
+
+class CallAgent(Agent):
+    """Tomi on a call: every turn goes through the backend's safety check before the model answers."""
+
+    def __init__(self, *, controller: CallController, backend: Backend, voices: Voices, context: dict | None, lang: str, instructions: str) -> None:
         super().__init__(
-            instructions=build_instructions(context, lang),
+            instructions=instructions,
             stt=spitch.STT(language=lang),
             tts=voices.tts(lang),
             llm=groq.LLM(
@@ -182,19 +215,8 @@ class TomiAgent(Agent):
         self.unclear_turns = 0
 
     @property
-    def patient_id(self) -> str:
-        return self.context["patient"]["id"]
-
-    async def on_enter(self) -> None:
-        opening = self.context.get("opening")
-        if opening:
-            # An approved opening line from the backend, already in the patient's language.
-            await self.session.say(opening)
-        else:
-            self.session.generate_reply(
-                instructions="You have already greeted the patient and said who you are; do not greet again. "
-                "Ask, in one short sentence, how they are getting on with today's plan."
-            )
+    def patient_id(self) -> str | None:
+        return ((self.context or {}).get("patient") or {}).get("id")
 
     async def on_user_turn_completed(self, turn_ctx: llm.ChatContext, new_message: llm.ChatMessage) -> None:
         text = (new_message.text_content or "").strip()
@@ -238,7 +260,7 @@ class TomiAgent(Agent):
         if verdict.get("action") == "clarify":
             # Never guess at unclear speech: ask again, and after two unclear turns hand over to people.
             self.unclear_turns += 1
-            if self.unclear_turns >= 2:
+            if self.unclear_turns >= 2 and self.patient_id:
                 self.unclear_turns = 0
                 asyncio.ensure_future(self.backend.ask_care_team(
                     call_id=self.controller.call_id, patient_id=self.patient_id,
@@ -250,6 +272,52 @@ class TomiAgent(Agent):
         self.unclear_turns = 0
 
         self.controller.to(CallState.SPEAKING)
+
+    @function_tool()
+    async def end_call(self, context: RunContext) -> None:
+        """End the call after saying goodbye."""
+        await context.wait_for_playout()
+        self.controller.to(CallState.COMPLETED)
+        await hang_up()
+
+
+class GuideAgent(CallAgent):
+    """A caller whose number is not on file: what CareLoop is and how to join. No patient data, no patient tools."""
+
+    def __init__(self, *, controller: CallController, backend: Backend, voices: Voices, lang: str) -> None:
+        super().__init__(controller=controller, backend=backend, voices=voices, context=None, lang=lang, instructions=guide_instructions(lang))
+
+    async def on_enter(self) -> None:
+        self.session.generate_reply(
+            instructions="You have already said who you are; do not greet again. In one or two short sentences, say this number "
+            "is not linked to CareLoop yet, and ask how you can help or whether they would like to hear what CareLoop is."
+        )
+
+
+class TomiAgent(CallAgent):
+    def __init__(self, *, controller: CallController, backend: Backend, voices: Voices, context: dict, lang: str) -> None:
+        super().__init__(controller=controller, backend=backend, voices=voices, context=context, lang=lang,
+                         instructions=build_instructions(context, lang))
+
+    async def on_enter(self) -> None:
+        opening = self.context.get("opening")
+        if opening:
+            # An approved opening line from the backend, already in the patient's language.
+            await self.session.say(opening)
+        else:
+            self.session.generate_reply(
+                instructions="You have already greeted them by name and said who you are; do not greet again. "
+                "In one short, warm sentence, ask how they are feeling today and how you can help."
+            )
+
+    @function_tool()
+    async def look_up_medicine(self, context: RunContext, name: str) -> dict:
+        """What a medicine on the patient's plan is generally used for, from MedlinePlus (US National Library of Medicine).
+
+        Args:
+            name: The medicine name as written on the plan.
+        """
+        return await self.backend.medicine_info(call_id=self.controller.call_id, name=name)
 
     @function_tool()
     async def record_task_update(
@@ -301,13 +369,6 @@ class TomiAgent(Agent):
         await self.backend.ask_care_team(call_id=self.controller.call_id, patient_id=self.patient_id, question=question)
         return "Passed to the care team. Tell the patient someone from their care team will follow up."
 
-    @function_tool()
-    async def end_call(self, context: RunContext) -> None:
-        """End the call after saying goodbye."""
-        await context.wait_for_playout()
-        self.controller.to(CallState.COMPLETED)
-        await hang_up()
-
 
 async def hang_up(after=None) -> None:
     """End the call for everyone, once `after` (a speech) has finished playing."""
@@ -336,32 +397,6 @@ async def language_menu(session: AgentSession, voices: Voices, keypad: Keypad, c
             await voices.say(session, "en", line("en", "no_key"))
         controller.to(CallState.UNCLEAR_INPUT, f"key {key!r}")
         controller.to(CallState.MENU)
-
-
-async def pin_gate(session, voices, keypad, controller, backend, phone: str | None) -> bool:
-    lang = controller.language or "en"
-    controller.to(CallState.VERIFICATION_GATE)
-    while True:
-        keypad.clear()
-        prompt = voices.say(session, lang, line(lang, "pin_prompt"))
-        first = await wait_for_key(keypad, [prompt], PIN_WAIT)
-        pin = None
-        if first is not None and first.isdigit():
-            rest = await keypad.digits(PIN_LENGTH - 1, first_timeout=8)
-            pin = first + (rest or "")
-        if pin is None or len(pin) != PIN_LENGTH:
-            if controller.menu_timed_out():
-                controller.to(CallState.UNVERIFIED, "no PIN entered")
-                return False
-            await voices.say(session, lang, line(lang, "no_key"))
-            continue
-        result = await backend.verify_pin(call_id=controller.call_id, phone_e164=phone, pin=pin)
-        outcome = controller.pin_result(bool(result.get("ok")), result.get("patient_id"), result.get("tries_left"))
-        if outcome == "verified":
-            return True
-        if outcome == "locked":
-            return False
-        await voices.say(session, lang, line(lang, "pin_wrong"))
 
 
 def prewarm(proc: JobProcess) -> None:
@@ -418,6 +453,7 @@ async def entrypoint(ctx: JobContext) -> None:
 
     call = await backend.start_call(direction=direction, phone_e164=phone, patient_id=patient_id)
     controller = CallController(call_id=meta.get("call_id") or call["id"], direction=direction)
+    patient_id = patient_id or call.get("patient_id")
     controller.language = language_code(call.get("language"), default="") or None
     if direction == "browser" and meta.get("language"):
         controller.language = language_code(meta["language"])  # the language the patient chose in the app
@@ -446,26 +482,26 @@ async def entrypoint(ctx: JobContext) -> None:
                 backend.log_turn(call_id=controller.call_id, speaker=speaker, text=item.text_content, language=controller.language or "en")
             )
 
-    # Until the PIN is checked, Tomi has no speech recognition and no model: only fixed lines and the keypad.
+    # Until Tomi knows who is calling, there is no speech recognition and no model: only fixed lines and the keypad.
     await session.start(room=ctx.room, agent=Agent(instructions="", stt=None, llm=None))
 
-    if direction == "browser":
+    if patient_id and (direction != "inbound" or call.get("known")):
         controller.patient_id = patient_id
-        controller.to(CallState.VERIFIED, "signed in to the app")
+        controller.to(CallState.VERIFIED, {"browser": "signed in to the app", "outbound": "number on the record"}.get(direction, "caller's number"))
     else:
-        if not controller.language:
-            if not await language_menu(session, voices, keypad, controller):
-                controller.to(CallState.UNVERIFIED, "no language chosen")
-                await voices.say(session, "en", line("en", "goodbye"))
-                await hang_up()
-                return
-        else:
-            await voices.say(session, controller.language, line(controller.language, "greeting"))
-        if not await pin_gate(session, voices, keypad, controller, backend, phone):
-            lang = controller.language or "en"
-            await voices.say(session, lang, line(lang, "pin_failed"), interruptible=False)
+        # A number we do not know: choose a language, then hear what CareLoop is. Nothing about anyone's care.
+        if not controller.language and not await language_menu(session, voices, keypad, controller):
+            controller.to(CallState.UNVERIFIED, "no language chosen")
+            await voices.say(session, "en", line("en", "goodbye"))
             await hang_up()
             return
+        lang = controller.language or "en"
+        if controller.state != CallState.MENU:
+            controller.to(CallState.MENU)
+        await voices.say(session, lang, line(lang, "greeting"))
+        controller.to(CallState.LISTENING, "unknown caller")
+        session.update_agent(GuideAgent(controller=controller, backend=backend, voices=voices, lang=lang))
+        return
 
     try:
         context = await backend.call_context(call_id=controller.call_id, patient_id=controller.patient_id)
@@ -487,11 +523,9 @@ async def entrypoint(ctx: JobContext) -> None:
     lang = controller.language or language_code(context["patient"].get("language"))
     controller.language = lang
     first_name = context["patient"]["first_name"]
-    if direction == "browser":
-        # The app has no menu or PIN, so this is where Tomi says who she is and that she is automated.
-        await voices.say(session, lang, line(lang, "greeting_named", first_name=first_name))
-    else:
-        await voices.say(session, lang, line(lang, "verified", first_name=first_name))
+    caller = context.get("caller") or {}
+    # No menu and no PIN, so this is where Tomi says who she is and that she is automated.
+    await voices.say(session, lang, line(lang, "greeting_named", first_name=caller.get("first_name") or first_name))
     controller.to(CallState.LISTENING)
     session.update_agent(TomiAgent(controller=controller, backend=backend, voices=voices, context=context, lang=lang))
 

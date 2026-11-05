@@ -19,13 +19,11 @@ import time
 import httpx
 
 from app.db import store
-from app.security import check_secret
 from app.safety import rules as safety
-from app.services import care, escalations, identity
+from app.services import briefs, care, drug_info, escalations, identity
 from app.services.activity_log import log_event
-from app.util import ApiError, first_name, make_id, not_found, now_iso
+from app.util import ApiError, first_name, make_id, normalize_phone, not_found, now_iso
 
-DEMO_PIN = "1234"
 
 
 def demo_enabled() -> bool:
@@ -86,20 +84,36 @@ async def dial(patient: dict, call: dict) -> bool:
 
 # ======================================================================= Tomi worker routes
 
+def _caller(phone_e164: str | None) -> tuple[dict | None, dict | None]:
+    """The patient, and the caregiver if it is a caregiver's phone, for a number on file."""
+    holder = identity._holder(normalize_phone(phone_e164 or "") or "") if phone_e164 else None
+    if not holder:
+        return None, None
+    caregiver = store().get("caregivers", holder["caregiver_id"]) if holder["kind"] == "caregiver" else None
+    return store().get("patients", holder["patient_id"]), caregiver
+
+
 def start_call(direction: str, phone_e164: str | None, patient_id: str | None) -> dict:
+    """No PIN on calls (decided by Nunsi, 5 Nov 2026): a number on file is enough. On a call we place, it is the
+    number on the record; on an incoming call, Tomi knows the caller by their number. An unknown number gets
+    general information about CareLoop and nothing about anyone's care."""
     patient = store().get("patients", patient_id) if patient_id else None
+    caregiver = None
+    if direction == "inbound" and not patient:
+        patient, caregiver = _caller(phone_e164)
     if direction == "outbound" and patient:
         waiting = store().first("calls", lambda item: item["status"] in ("initiated", "ringing"), patient_id=patient["id"], direction="outbound")
         if waiting:
-            waiting["status"] = "answered"
-            return {"id": waiting["id"], "language": patient["language"]}
+            waiting.update(status="answered", verification_state="verified")
+            return {"id": waiting["id"], "language": patient["language"], "patient_id": patient["id"], "known": True}
     call = store().add("calls", {
-        "id": make_id("c"), "patient_id": patient["id"] if patient else None, "direction": direction,
-        "channel": "browser_voice" if direction == "browser" else "phone", "status": "answered",
-        "verification_state": "verified" if direction == "browser" and patient else "pending",
+        "id": make_id("c"), "patient_id": patient["id"] if patient else None, "caregiver_id": caregiver["id"] if caregiver else None,
+        "direction": direction, "channel": "browser_voice" if direction == "browser" else "phone", "status": "verified" if patient else "answered",
+        "verification_state": "verified" if patient else "unknown_caller", "verified_by": None if not patient else
+        "app sign-in" if direction == "browser" else "number we called" if direction == "outbound" else "caller's number",
         "language": patient["language"] if patient else None, "phone_e164": phone_e164, "started_at": now_iso(), "ended_at": None,
         "outcome": None, "turns": []})
-    return {"id": call["id"], "language": call["language"] if direction != "inbound" else None}
+    return {"id": call["id"], "language": call["language"], "patient_id": call["patient_id"], "known": bool(patient)}
 
 
 def _call(call_id: str) -> dict:
@@ -111,30 +125,24 @@ def _call(call_id: str) -> dict:
 
 def _verified_patient(call: dict) -> dict:
     if call["verification_state"] != "verified" or not call.get("patient_id"):
-        raise ApiError("Verify the caller's PIN first.", 403)
+        raise ApiError("This caller is not linked to a patient.", 403)
     return care.find_patient(call["patient_id"])
 
 
-def verify_pin(call_id: str, phone_e164: str | None, pin: str) -> dict:
-    call = _call(call_id)
-    ok, patient_id, tries_left = identity.verify_voice_pin(phone_e164 or call.get("phone_e164") or "", str(pin))
-    if not ok:
-        return {"ok": False, "tries_left": tries_left}
-    call.update(patient_id=patient_id, verification_state="verified", status="verified")
-    call["language"] = call["language"] or store().get("patients", patient_id)["language"]
-    return {"ok": True, "patient_id": patient_id}
-
-
 def call_context(call_id: str) -> dict:
-    patient = _verified_patient(_call(call_id))
+    call = _call(call_id)
+    patient = _verified_patient(call)
     plan = store().first("plans", patient_id=patient["id"], status="approved")
     now_text = now_iso()
     visits = sorted(store().where("appointments", lambda item: item["starts_at"] > now_text and item["status"] != "cancelled", patient_id=patient["id"]),
                     key=lambda item: item["starts_at"])
     tasks = sorted(store().where("tasks", lambda item: item["status"] in ("pending", "overdue", "patient_reported_done", "unable"), patient_id=patient["id"]),
                    key=lambda item: item["due_at"])
+    caregiver = store().get("caregivers", call["caregiver_id"]) if call.get("caregiver_id") else None
     return {
         "patient": {"id": patient["id"], "first_name": first_name(patient["name"]), "language": patient["language"], "timezone": patient.get("timezone", "Africa/Lagos")},
+        "caller": {"kind": "caregiver", "first_name": first_name(caregiver["name"]), "relation": caregiver.get("relation")} if caregiver else {"kind": "patient"},
+        "today": briefs.patient_brief(patient)["today"],
         "consent": {"voice": "voice" in patient.get("channels", [])},
         "facility": patient.get("facility"),
         "plan": None if not plan else {
@@ -150,10 +158,13 @@ def call_context(call_id: str) -> dict:
 
 def check_turn(call_id: str, text: str, confidence: float | None = None) -> dict:
     call = _call(call_id)
-    patient = _verified_patient(call)
     check = safety.check(text or "", confidence)
     if check.action == "clarify":
         return {"action": "clarify"}
+    if not call.get("patient_id"):
+        # A caller we do not know: no record to escalate on, but a red flag still gets the emergency line.
+        return {"action": "escalate", "escalation": None} if check.escalate else {"action": "continue"}
+    patient = _verified_patient(call)
     if check.action == "confirm":  # Tomi's own prompt asks again; the worker only knows continue or escalate
         log_event(patient["id"], actor_type="system", actor_id="Safety engine", source_channel="voice", event_type="safety_check_asked",
                   summary=f'Mentioned {check.label} with a "no" during a call.', verification_status="system_recorded")
@@ -184,6 +195,16 @@ def barrier(call_id: str, kind: str) -> None:
     care.open_barrier(patient, mapped, "voice")
 
 
+async def medicine_info(call_id: str, name: str) -> dict:
+    """What a medicine on the caller's plan is generally for (MedlinePlus). Anything else goes to the care team."""
+    patient = _verified_patient(_call(call_id))
+    on_plan = [drug_info.clean_name(item["name"]) for item in briefs.patient_brief(patient)["medicines"]]
+    wanted = drug_info.clean_name(name)
+    if not wanted or not any(wanted in item or item in wanted for item in on_plan if item):
+        return {"found": False, "note": "This medicine is not on their plan. Offer to pass the question to the care team."}
+    return drug_info.for_patient(await drug_info.look_up(name))
+
+
 def question(call_id: str, original_text: str) -> None:
     patient = _verified_patient(_call(call_id))
     log_event(patient["id"], actor_type="patient", actor_id=patient["name"], source_channel="voice", event_type="question_for_care_team",
@@ -192,7 +213,8 @@ def question(call_id: str, original_text: str) -> None:
 
 def end_call(call_id: str, outcome: str) -> None:
     call = _call(call_id)
-    words = {"completed": "Check-in completed", "escalated": "Escalation created", "unverified": "Not verified", "not_reached": "No answer"}
+    words = {"completed": "Check-in completed", "escalated": "Escalation created", "unverified": "Not verified", "not_reached": "No answer",
+             "unknown_caller": "Caller not registered; told about CareLoop"}
     call.update(status="failed" if outcome == "not_reached" else "completed", ended_at=now_iso(), outcome=words.get(outcome, outcome))
     if call["verification_state"] == "pending":
         call["verification_state"] = "not_reached" if outcome == "not_reached" else "unverified"
@@ -210,7 +232,6 @@ KEYPAD = {
     "menu": [{"key": "1", "label": "Report a problem"}, {"key": "2", "label": "My next visit"}, {"key": "3", "label": "End"}],
     "reschedule": [{"key": "1", "label": "Yes, ask for a new time"}, {"key": "2", "label": "No"}],
 }
-GREETING = "Hello, this is Tomi, an automated assistant from your care team."
 MENU_PROMPT = "Is there anything else? Press 1 to report a problem, 2 for your next visit, or 3 to end."
 
 
@@ -244,21 +265,13 @@ def voice_turn(session: dict, payload: dict | None) -> dict:
         session["turns"].append({"speaker": "patient", "transcript": f"Pressed {digit}" if digit else raw, "confidence": confidence, "keypad": bool(digit), "at": now_iso()})
     tasks = lambda: store().get("tasks", session.get("task_id"))
 
-    if session["state"] == "greeting":
-        return _say(session, f"{GREETING} To keep your details private, please enter your 4-digit PIN.", "verify", pin_required=True)
-    if session["state"] == "verify":
-        pin = str(payload.get("pin") or raw)
-        if check_secret(pin, patient.get("pin_hash")):
-            session["verified"] = True
-            task = care.next_open_task(patient["id"])
-            session["task_id"] = task["id"] if task else None
-            return _say(session, f"Thank you, {first_name(patient['name'])}. {task_question(task)}", "task" if task else "menu")
-        session["pin_attempts"] = session.get("pin_attempts", 0) + 1
-        if session["pin_attempts"] >= 3:
-            log_event(patient["id"], actor_type="system", actor_id="Tomi", source_channel=session["channel"], event_type="verification_failed",
-                      summary="Identity not verified after 3 PIN attempts. No details shared.", verification_status="system_recorded")
-            return _say(session, "I could not confirm who you are, so I cannot share details. Please contact your care team. Goodbye.", "ended")
-        return _say(session, "That PIN did not match. Please try again.", "verify", pin_required=True)
+    if session["state"] in ("greeting", "verify"):
+        # The patient is signed in to the app, so there is no PIN (decided by Nunsi, 5 Nov 2026).
+        session["verified"] = True
+        task = care.next_open_task(patient["id"])
+        session["task_id"] = task["id"] if task else None
+        return _say(session, f"Hello {first_name(patient['name'])}, this is Tomi, an automated assistant from CareLoop. {task_question(task)}",
+                    "task" if task else "menu")
 
     intent = None if digit else care.classify(raw)
     check = safety.check(raw, None if digit else confidence)
@@ -345,9 +358,9 @@ def _outbound_script(patient: dict) -> list[dict]:
     task = care.next_open_task(patient["id"])
     return [
         {"t": 0, "status": "initiated"}, {"t": 2.5, "status": "ringing"}, {"t": 6, "status": "answered"},
-        {"t": 7, "turn": {"speaker": "tomi", "transcript": f"{GREETING} To keep your details private, please enter your PIN."}},
-        {"t": 10, "status": "verified", "verification_state": "verified", "turn": {"speaker": "patient", "transcript": "PIN entered", "keypad": True, "confirmed": True}},
-        {"t": 11.5, "turn": {"speaker": "tomi", "transcript": f"Thank you. {task_question(task)}"}},
+        {"t": 6.5, "status": "verified", "verification_state": "verified"},
+        {"t": 7, "turn": {"speaker": "tomi", "transcript": f"Hello {first_name(patient['name'])}, this is Tomi, an automated assistant from CareLoop."}},
+        {"t": 11.5, "turn": {"speaker": "tomi", "transcript": task_question(task)}},
         {"t": 15, "turn": {"speaker": "patient", "transcript": "Yes, I took it.", "confidence": 0.92}},
         {"t": 16.5, "turn": {"speaker": "tomi", "transcript": "I heard that you took it. Is that right?"}},
         {"t": 19, "turn": {"speaker": "patient", "transcript": "Pressed 1", "keypad": True, "confirmed": True}},
@@ -356,14 +369,13 @@ def _outbound_script(patient: dict) -> list[dict]:
     ]
 
 
-def _inbound_script() -> list[dict]:
+def _inbound_script(patient: dict) -> list[dict]:
     return [
         {"t": 0, "status": "ringing"}, {"t": 2, "status": "answered"},
-        {"t": 3, "turn": {"speaker": "tomi", "transcript": f"{GREETING} Please enter your PIN."}},
-        {"t": 6, "status": "verified", "verification_state": "verified", "turn": {"speaker": "patient", "transcript": "PIN entered", "keypad": True, "confirmed": True}},
-        {"t": 7.5, "turn": {"speaker": "tomi", "transcript": "You can press 1 for your tasks, 2 to report a problem, 3 for your visits, or 4 for your care team."}},
-        {"t": 10.5, "turn": {"speaker": "patient", "transcript": "Pressed 3", "keypad": True}},
-        {"t": 12, "turn": {"speaker": "tomi", "transcript": "Your next visit is booked. I will send the details by email."}},
+        {"t": 2.5, "status": "verified", "verification_state": "verified"},
+        {"t": 3, "turn": {"speaker": "tomi", "transcript": f"Hello {first_name(patient['name'])}, this is Tomi, an automated assistant from CareLoop. How can I help you today?"}},
+        {"t": 7, "turn": {"speaker": "patient", "transcript": "When is my next visit?", "confidence": 0.93}},
+        {"t": 9, "turn": {"speaker": "tomi", "transcript": "Your next visit is booked. I will send the details by email."}},
         {"t": 14.5, "status": "completed", "outcome": "Visit details requested"},
     ]
 
@@ -372,7 +384,7 @@ def scripted_call(patient: dict, direction: str) -> dict:
     call = store().add("calls", {
         "id": make_id("c"), "patient_id": patient["id"], "direction": direction, "channel": "phone", "status": "initiated" if direction == "outbound" else "ringing",
         "verification_state": "pending", "language": patient["language"], "started_at": now_iso(), "ended_at": None, "outcome": None, "turns": [],
-        "script": _outbound_script(patient) if direction == "outbound" else _inbound_script(), "script_started": time.time(), "script_index": 0})
+        "script": _outbound_script(patient) if direction == "outbound" else _inbound_script(patient), "script_started": time.time(), "script_index": 0})
     return advance_call(call)
 
 

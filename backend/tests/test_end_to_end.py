@@ -51,11 +51,10 @@ def test_discharge_note_to_escalation_on_the_dashboard(client, mailbox):
     assert reminder["subject"] == "A reminder from your care team" and "Amlodipine" not in reminder["text"]
     client.post("/api/auth/patient/sign-out")
 
-    # 5. Tomi calls. The PIN is checked before anything is said about the plan; the patient reports the medicine taken,
-    #    then says something that sounds like an emergency.
+    # 5. The patient calls Tomi. Their number is on file, so there is no PIN; they report the medicine taken,
+    #    then say something that sounds like an emergency.
     call = client.post("/api/voice/calls", json={"direction": "inbound", "phone_e164": PHONE}, headers=WORKER).json()["call"]
-    assert client.get(f"/api/voice/calls/{call['id']}/context", headers=WORKER).status_code == 403
-    assert client.post(f"/api/voice/calls/{call['id']}/verify-pin", json={"phone_e164": PHONE, "pin": "4826"}, headers=WORKER).json()["ok"]
+    assert call["known"] is True
     context = client.get(f"/api/voice/calls/{call['id']}/context", headers=WORKER).json()["context"]
     assert context["patient"]["language"] == "Igbo" and context["plan"]["status"] == "approved"
     client.post(f"/api/voice/calls/{call['id']}/task-updates", json={"task_id": context["tasks"][0]["id"], "status": "done"}, headers=WORKER)

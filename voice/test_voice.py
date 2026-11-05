@@ -1,4 +1,4 @@
-"""Tests for the parts of Tomi that run without LiveKit: call states, keypad, PIN gate and the mock backend.
+"""Tests for the parts of Tomi that run without LiveKit: call states, keypad, caller recognition and the mock backend.
 
 Run from the repository root:  python -m pytest voice
 """
@@ -18,27 +18,32 @@ def test_language_code_accepts_names_and_codes():
     assert language_code(None, default="") == ""
 
 
-def test_inbound_happy_path():
+def test_known_caller_goes_straight_to_the_conversation():
     call = CallController(call_id="c-1", direction="inbound")
     call.to(CallState.ANSWERED)
-    call.to(CallState.MENU)
-    assert call.choose_language("1") == "ha"
-    call.to(CallState.VERIFICATION_GATE)
-    assert call.pin_result(True, "p-zainab") == "verified"
+    call.patient_id = "p-zainab"
+    call.to(CallState.VERIFIED, "caller's number")
     call.to(CallState.LISTENING)
     call.to(CallState.SAFETY_AND_ACTION)
     call.to(CallState.SPEAKING)
     call.to(CallState.LISTENING)
     call.to(CallState.COMPLETED)
     assert call.outcome() == "completed"
-    assert [entry["state"] for entry in call.log][:3] == ["answered", "menu", "verification_gate"]
+    assert [entry["state"] for entry in call.log][:2] == ["answered", "verified"]
 
 
-def test_cannot_skip_the_pin():
+def test_unknown_caller_chooses_a_language_then_hears_about_careloop():
     call = CallController(call_id="c-1", direction="inbound")
     call.to(CallState.ANSWERED)
     with pytest.raises(InvalidTransition):
-        call.to(CallState.LISTENING)
+        call.to(CallState.LISTENING)  # never straight into a conversation without the menu or a known number
+    call.to(CallState.MENU)
+    assert call.choose_language("2") == "yo"
+    call.to(CallState.LISTENING, "unknown caller")
+    call.to(CallState.SAFETY_AND_ACTION)
+    call.to(CallState.SPEAKING)
+    call.to(CallState.COMPLETED)
+    assert not call.verified and call.outcome() == "unknown_caller"
 
 
 def test_wrong_menu_key_counts_as_a_repeat():
@@ -47,16 +52,6 @@ def test_wrong_menu_key_counts_as_a_repeat():
     assert call.menu_repeats == 1
     assert call.menu_timed_out() is False
     assert call.menu_timed_out() is True
-
-
-def test_pin_locks_when_backend_says_no_tries_left():
-    call = CallController(call_id="c-1", direction="inbound")
-    call.to(CallState.ANSWERED)
-    call.to(CallState.VERIFICATION_GATE)
-    assert call.pin_result(False, tries_left=2) == "retry"
-    assert call.pin_result(False, tries_left=0) == "locked"
-    assert call.state == CallState.UNVERIFIED
-    assert call.outcome() == "unverified"
 
 
 def test_escalation_is_reachable_from_any_state():
@@ -85,31 +80,16 @@ def test_keypad_times_out():
     assert asyncio.run(Keypad().digit(0.05)) is None
 
 
-def test_mock_pin_does_not_reveal_unknown_numbers():
+def test_mock_knows_callers_by_number():
     async def run():
         backend = MockBackend()
-        call = await backend.start_call(direction="inbound", phone_e164="+2348000000999", patient_id=None)
-        unknown = await backend.verify_pin(call_id=call["id"], phone_e164="+2348000000999", pin="1234")
-        wrong = await backend.verify_pin(call_id=call["id"], phone_e164="+2348000000101", pin="0000")
-        right = await backend.verify_pin(call_id=call["id"], phone_e164="+2348000000101", pin="1234")
-        return unknown, wrong, right
+        known = await backend.start_call(direction="inbound", phone_e164="+2348000000101", patient_id=None)
+        unknown = await backend.start_call(direction="inbound", phone_e164="+2348000000999", patient_id=None)
+        return known, unknown
 
-    unknown, wrong, right = asyncio.run(run())
-    assert unknown.keys() == wrong.keys() == {"ok", "tries_left"}
-    assert unknown["ok"] is False and wrong["ok"] is False
-    assert right == {"ok": True, "patient_id": "p-zainab"}
-
-
-def test_mock_pin_locks_after_five_wrong_tries():
-    async def run():
-        backend = MockBackend()
-        results = [await backend.verify_pin(call_id="c-x", phone_e164="+2348000000101", pin="0000") for _ in range(5)]
-        results.append(await backend.verify_pin(call_id="c-x", phone_e164="+2348000000101", pin="1234"))
-        return results
-
-    results = asyncio.run(run())
-    assert [r["tries_left"] for r in results[:5]] == [4, 3, 2, 1, 0]
-    assert results[5]["ok"] is False
+    known, unknown = asyncio.run(run())
+    assert known["known"] is True and known["patient_id"] == "p-zainab" and known["language"] == "Hausa"
+    assert unknown["known"] is False and unknown["patient_id"] is None and unknown["language"] is None
 
 
 def test_mock_safety_check_escalates_red_flags():

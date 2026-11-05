@@ -4,14 +4,13 @@
 import { maskPhone } from './format.js';
 import { MESSAGE_CHANNELS } from './languages.js';
 
-const STORAGE_KEY = 'careloop-mock-v5';
+const STORAGE_KEY = 'careloop-mock-v6';
 const DEFAULT_FACILITY = 'Kestrel General Hospital';
 // The sample patients belong to whichever care facility the signed-in staff member chose (see setMockFacility).
 let FACILITY = DEFAULT_FACILITY;
 const shortFacility = (name) => name.replace(/\s+(General Hospital|Teaching Hospital|Specialist Hospital|Medical Centre|Pharmacy|Family Clinic|Care Home)$/, '');
 const TOMI_LINE = '0800 000 0000';
 const REVIEWER = 'Dr. Ada Okafor';
-const DEMO_PIN = '1234';
 
 // Demo stand-in for the backend safety engine's red_flags.json. Substrings only; the real rules live server-side.
 const RED_FLAG_TERMS = ['chest', 'breath', 'breathe', 'faint', 'kirji', 'ƙirji', 'numfashi', 'àyà', 'mímí'];
@@ -226,7 +225,7 @@ function seed() {
     ev('p-zainab', at(-3, '08:30'), 'agent', 'Care Plan Agent', 'system', 'plan_drafted', 'Plan drafted from discharge note. 1 dose line flagged.', 'system_recorded'),
     ev('p-zainab', at(-3, '08:45'), 'clinician', REVIEWER, 'dashboard', 'plan_approved', 'Plan corrected and approved.', 'clinician_verified'),
     ev('p-zainab', at(-3, '09:00'), 'patient', 'Zainab Musa', 'clinic', 'consent_recorded', 'Agreed at the clinic to phone calls, email and chat in the app. PIN set.', 'clinician_verified'),
-    ev('p-zainab', at(-1, '09:15'), 'system', 'Scheduler', 'voice', 'call_answered', 'Reminder call answered. Identity verified by PIN.', 'provider_status'),
+    ev('p-zainab', at(-1, '09:15'), 'system', 'Scheduler', 'voice', 'call_answered', 'Reminder call answered on the number on her record.', 'provider_status'),
     ev('p-zainab', at(-1, '09:17'), 'patient', 'Zainab Musa', 'voice', 'task_reported', 'Morning medicine reported as taken.', 'self_reported'),
     ev('p-zainab', at(-1, '09:17'), 'patient', 'Zainab Musa', 'voice', 'barrier_opened', 'Could not get the evening medicine.', 'self_reported'),
     ev('p-zainab', at(-1, '09:18'), 'agent', 'Barrier Resolution Agent', 'voice', 'barrier_option_offered', 'Possible pharmacy contact shared. Barrier not resolved.', 'system_recorded'),
@@ -250,9 +249,7 @@ function seed() {
     {
       id: 'c-1', patient_id: 'p-zainab', direction: 'outbound', channel: 'phone', status: 'completed', verification_state: 'verified', language: 'Hausa', started_at: at(-1, '09:15'), ended_at: at(-1, '09:19'), outcome: 'Task reported, barrier opened',
       turns: [
-        turn('tomi', 'Hello, this is Tomi, an automated assistant from your care team. To keep your details private, please enter your PIN.'),
-        turn('patient', 'PIN entered', { keypad: true, confirmed: true }),
-        turn('tomi', 'Thank you, Zainab. Your morning medicine was due at 08:00. Did you take it?'),
+        turn('tomi', 'Hello Zainab, this is Tomi, an automated assistant from CareLoop. Your morning medicine was due at 08:00. Did you take it?'),
         turn('patient', 'Na sha na safe, amma ban samu ɗayan maganin ba.', { english: 'I took the morning one but could not get the other medicine.', confidence: 0.86 }),
         turn('tomi', 'I heard that you took the morning medicine, and you could not get the evening medicine. Is that right?'),
         turn('patient', 'Eh.', { english: 'Yes.', confidence: 0.95, confirmed: true }),
@@ -263,8 +260,7 @@ function seed() {
     {
       id: 'c-3', patient_id: 'p-zainab', direction: 'inbound', channel: 'phone', status: 'completed', verification_state: 'verified', language: 'Hausa', started_at: at(0, '09:18'), ended_at: at(0, '09:25'), outcome: 'Reschedule requested, escalation created',
       turns: [
-        turn('tomi', 'Hello, this is Tomi, an automated assistant from your care team. Please enter your PIN.'),
-        turn('patient', 'PIN entered', { keypad: true, confirmed: true }),
+        turn('tomi', 'Hello Zainab, this is Tomi, an automated assistant from CareLoop. How can I help you today?'),
         turn('patient', 'Ba zan iya biyan kuɗin mota ranar ba.', { english: 'I cannot pay for transport on that day.', confidence: 0.81 }),
         turn('tomi', 'I can ask the clinic for a new time. Your current visit stays booked until the clinic confirms. Shall I ask?'),
         turn('patient', 'Eh.', { english: 'Yes.', confidence: 0.94, confirmed: true }),
@@ -428,7 +424,7 @@ function classify(text) {
   const lower = text.toLowerCase();
   if (RED_FLAG_TERMS.some((term) => lower.includes(term))) return { kind: 'red_flag' };
   for (const [type, terms] of Object.entries(BARRIER_TERMS)) if (terms.some((term) => lower.includes(term))) return { kind: 'barrier', type };
-  if (/(appointment|visit|reschedule|new time|change.*time)/.test(lower)) return { kind: 'reschedule' };
+  if (/(reschedul|new time|another (day|time)|change.*(time|date|day|visit|appointment)|move (my|the|it)|(can'?t|cannot|won'?t be able to) (make|come|go|attend))/.test(lower)) return { kind: 'reschedule' };
   if (/^(done|yes|i took|took it|i have taken|eh|bẹ́ẹ̀ni|ee)/.test(lower) || lower.includes('took')) return { kind: 'done' };
   if (/not yet|later|no\b/.test(lower)) return { kind: 'not_yet' };
   if (/problem/.test(lower)) return { kind: 'problem' };
@@ -576,22 +572,11 @@ function voiceTurn(session, input) {
   const confidence = input?.confidence ?? (digit ? 1 : 0.9);
   if (raw || digit) session.turns.push({ speaker: 'patient', transcript: digit ? `Pressed ${digit}` : raw, confidence, keypad: Boolean(digit), at: nowIso() });
 
-  if (session.state === 'greeting') {
-    return voiceSay(session, 'Hello, this is Tomi, an automated assistant from your care team. To keep your details private, please enter your 4-digit PIN.', 'verify', { pin_required: true });
-  }
-  if (session.state === 'verify') {
-    const expectedPin = patient.pin_mock || DEMO_PIN;
-    if (raw === expectedPin || input?.pin === expectedPin) {
-      session.verified = true;
-      session.task_id = nextOpenTask(patient.id)?.id || null;
-      return voiceSay(session, `Thank you, ${patient.name.split(' ')[0]}. ${taskQuestion(nextOpenTask(patient.id))}`, session.task_id ? 'task' : 'menu');
-    }
-    session.pin_attempts = (session.pin_attempts || 0) + 1;
-    if (session.pin_attempts >= 3) {
-      logEvent(patient.id, { actor_type: 'system', actor_id: 'Tomi', source_channel: session.channel, event_type: 'verification_failed', summary: 'Identity not verified after 3 PIN attempts. No details shared.', verification_status: 'system_recorded' });
-      return voiceSay(session, 'I could not confirm who you are, so I cannot share details. Please contact your care team. Goodbye.', 'ended');
-    }
-    return voiceSay(session, 'That PIN did not match. Please try again.', 'verify', { pin_required: true });
+  if (session.state === 'greeting' || session.state === 'verify') {
+    // Signed in to the app, so no PIN (same as the API).
+    session.verified = true;
+    session.task_id = nextOpenTask(patient.id)?.id || null;
+    return voiceSay(session, `Hello ${patient.name.split(' ')[0]}, this is Tomi, an automated assistant from CareLoop. ${taskQuestion(nextOpenTask(patient.id))}`, session.task_id ? 'task' : 'menu');
   }
 
   const intent = digit ? null : classify(raw);
@@ -670,9 +655,9 @@ function outboundScript(patient) {
     { t: 0, status: 'initiated' },
     { t: 2500, status: 'ringing' },
     { t: 6000, status: 'answered' },
-    { t: 7000, turn: { speaker: 'tomi', transcript: 'Hello, this is Tomi, an automated assistant from your care team. To keep your details private, please enter your PIN.' } },
-    { t: 10000, status: 'verified', verification_state: 'verified', turn: { speaker: 'patient', transcript: 'PIN entered', keypad: true, confirmed: true } },
-    { t: 11500, turn: { speaker: 'tomi', transcript: `Thank you. ${taskQuestion(task)}` } },
+    { t: 6500, status: 'verified', verification_state: 'verified' },
+    { t: 7000, turn: { speaker: 'tomi', transcript: `Hello ${patient.name.split(' ')[0]}, this is Tomi, an automated assistant from CareLoop.` } },
+    { t: 11500, turn: { speaker: 'tomi', transcript: taskQuestion(task) } },
     { t: 15000, turn: { speaker: 'patient', transcript: 'Yes, I took it.', confidence: 0.92 } },
     { t: 16500, turn: { speaker: 'tomi', transcript: 'I heard that you took it. Is that right?' } },
     { t: 19000, turn: { speaker: 'patient', transcript: 'Pressed 1', keypad: true, confirmed: true } },
@@ -682,15 +667,14 @@ function outboundScript(patient) {
   return steps;
 }
 
-function inboundScript() {
+function inboundScript(patient) {
   return [
     { t: 0, status: 'ringing' },
     { t: 2000, status: 'answered' },
-    { t: 3000, turn: { speaker: 'tomi', transcript: 'Hello, this is Tomi, an automated assistant from your care team. Please enter your PIN.' } },
-    { t: 6000, status: 'verified', verification_state: 'verified', turn: { speaker: 'patient', transcript: 'PIN entered', keypad: true, confirmed: true } },
-    { t: 7500, turn: { speaker: 'tomi', transcript: 'You can press 1 for your tasks, 2 to report a problem, 3 for your visits, or 4 for your care team.' } },
-    { t: 10500, turn: { speaker: 'patient', transcript: 'Pressed 3', keypad: true } },
-    { t: 12000, turn: { speaker: 'tomi', transcript: 'Your next visit is booked. I will send the details by text.' } },
+    { t: 2500, status: 'verified', verification_state: 'verified' },
+    { t: 3000, turn: { speaker: 'tomi', transcript: `Hello ${patient.name.split(' ')[0]}, this is Tomi, an automated assistant from CareLoop. How can I help you today?` } },
+    { t: 7000, turn: { speaker: 'patient', transcript: 'When is my next visit?', confidence: 0.93 } },
+    { t: 9000, turn: { speaker: 'tomi', transcript: 'Your next visit is booked. I will send the details by email.' } },
     { t: 14500, status: 'completed', outcome: 'Visit details requested' }
   ];
 }
@@ -854,6 +838,47 @@ function parseTimes(lower) {
   return null;
 }
 
+// Same split as backend/app/services/assistant.py: questions and pasted reports get an answer, instructions a draft.
+const QUESTION_START = /^\s*(who|what|which|when|where|why|how|is|are|was|were|does|do|did|has|have|tell me|show me|list|summari[sz]e|explain|compare|give me|any|look up|check (?:if|whether|for)|interpret|what's|whats)\b/i;
+const CHANGE_WORD = /^(book|add|schedule|text|sms|send|call|ring|remind|note|change|move|cancel|set|start|stop|prescribe|put)$/i;
+
+function isQuestion(text) {
+  if (text.length > 400) return true;
+  const opening = text.replace(/^\s*(please|pls|kindly|can you|could you|would you|will you)\s+/i, '');
+  if (CHANGE_WORD.test((opening.split(' ')[0] || '').replace(/[,.:]/g, ''))) return false;
+  return QUESTION_START.test(opening) || text.trim().endsWith('?');
+}
+
+const plural = (count, word) => `${count} ${word}${count === 1 ? '' : 's'}`;
+
+// The rules-based answer the API gives without a model: counts from the record, never a guess.
+function rulesAnswer(patient) {
+  const tasksOf = (id) => db.tasks.filter((task) => task.patient_id === id);
+  const counts = (id) => {
+    const tasks = tasksOf(id);
+    return { done: tasks.filter((task) => ['patient_reported_done', 'clinician_verified'].includes(task.status)).length, due: tasks.filter((task) => task.status === 'pending').length, missed: tasks.filter((task) => ['overdue', 'unable'].includes(task.status)).length };
+  };
+  const openEscalations = (id) => db.escalations.filter((item) => item.patient_id === id && item.status !== 'resolved').length;
+  if (patient) {
+    const count = counts(patient.id);
+    const plan = db.plans.find((item) => item.patient_id === patient.id && item.status === 'approved') || db.plans.find((item) => item.patient_id === patient.id);
+    const medicines = (plan?.medications || []).map((item) => item.name).join(', ') || 'none on the plan';
+    const visit = db.appointments.filter((item) => item.patient_id === patient.id && item.status !== 'cancelled' && item.starts_at > new Date().toISOString()).sort((a, b) => a.starts_at.localeCompare(b.starts_at))[0];
+    const when = visit && new Date(visit.starts_at).toLocaleString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+    return `${patient.name}: ${count.done} tasks done, ${count.due} due and ${count.missed} missed. Medicines: ${medicines}. ${visit ? `Next visit: ${visit.what}, ${when}.` : 'No visit booked.'} ${plural(openEscalations(patient.id), 'open escalation')}.`;
+  }
+  const flagged = db.patients.map((item) => {
+    const count = counts(item.id);
+    const overdue = tasksOf(item.id).filter((task) => task.status === 'overdue' && task.criticality === 'high').length;
+    const problems = db.barriers.filter((barrier) => barrier.patient_id === item.id && !barrier.status.startsWith('resolved')).length;
+    const escalations = openEscalations(item.id);
+    const reasons = [escalations && plural(escalations, 'open escalation'), overdue && plural(overdue, 'overdue high-importance task'), problems && plural(problems, 'open problem'), count.missed && `${count.missed} missed`].filter(Boolean);
+    return { name: item.name, rank: [escalations, overdue, problems, count.missed], reasons };
+  }).filter((row) => row.reasons.length).sort((a, b) => b.rank.map((value, index) => value - a.rank[index]).find(Boolean) || 0);
+  if (!flagged.length) return 'No patient has an open escalation, an overdue task or an open problem right now.';
+  return `Needing attention:\n${flagged.slice(0, 6).map((row) => `- ${row.name}: ${row.reasons.join(', ')}`).join('\n')}`;
+}
+
 function mentionedPatient(text) {
   const lower = text.toLowerCase();
   return db.patients.find((patient) => lower.includes(patient.name.toLowerCase()))
@@ -1009,11 +1034,14 @@ const assistantMethods = {
     const instruction = String(text || '').trim();
     if (!instruction) { const error = new Error('Type or say what you want done.'); error.status = 400; throw error; }
     const patient = patient_id ? findPatient(patient_id) : mentionedPatient(instruction);
+    if (isQuestion(instruction)) {
+      return respond({ draft: { instruction, mode: 'answer', patient: patient ? { id: patient.id, name: patient.name, language: patient.language, channels: patient.channels } : null, needs_patient: false, reply: rulesAnswer(patient), actions: [], templates: [] } }, 700);
+    }
     if (!patient) {
-      return respond({ draft: { instruction, patient: null, reply: 'Which patient is this for? Choose one and I will draft the changes.', needs_patient: true, choices: db.patients.map((item) => ({ id: item.id, name: item.name })), actions: [] } }, 500);
+      return respond({ draft: { instruction, mode: 'draft', patient: null, reply: 'Which patient is this for? Choose one and I will draft the changes.', needs_patient: true, choices: db.patients.map((item) => ({ id: item.id, name: item.name })), actions: [] } }, 500);
     }
     const actions = splitInstruction(instruction).map((clause) => draftAction(clause, patient));
-    return respond({ draft: { instruction, patient: { id: patient.id, name: patient.name, language: patient.language, channels: patient.channels }, reply: draftReply(patient, actions), needs_patient: false, actions, templates: templateOptions(patient) } }, 700);
+    return respond({ draft: { instruction, mode: 'draft', patient: { id: patient.id, name: patient.name, language: patient.language, channels: patient.channels }, reply: draftReply(patient, actions), needs_patient: false, actions, templates: templateOptions(patient) } }, 700);
   },
 
   async applyAssistantActions({ patient_id, actions, by }) {
@@ -1248,7 +1276,7 @@ export const mock = {
   },
   async simulateInboundCall({ patient_id }) {
     const patient = findPatient(patient_id);
-    const call = { id: makeId('c'), patient_id, direction: 'inbound', channel: 'phone', status: 'ringing', verification_state: 'pending', language: patient.language, started_at: nowIso(), ended_at: null, outcome: null, turns: [], script: inboundScript(), script_started: Date.now(), script_index: 0 };
+    const call = { id: makeId('c'), patient_id, direction: 'inbound', channel: 'phone', status: 'ringing', verification_state: 'pending', language: patient.language, started_at: nowIso(), ended_at: null, outcome: null, turns: [], script: inboundScript(patient), script_started: Date.now(), script_index: 0 };
     db.calls.push(call);
     return respond({ call: withPatient(advanceCall(call)) });
   },
@@ -1257,7 +1285,7 @@ export const mock = {
     const patient = findPatient(patient_id);
     const session = { id: makeId('vs'), patient_id, channel: 'browser_voice', state: 'greeting', turns: [], verified: false, started_at: nowIso(), closed: false };
     db.voice_sessions.push(session);
-    return respond({ session: { id: session.id, mode: 'mock', language: patient.language, demo_pin: patient.pin_mock || DEMO_PIN } }, 600);
+    return respond({ session: { id: session.id, mode: 'mock', language: patient.language } }, 600);
   },
   async sendVoiceInput(sessionId, input) {
     const session = db.voice_sessions.find((item) => item.id === sessionId) || notFound('Voice session');

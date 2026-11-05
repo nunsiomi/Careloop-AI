@@ -14,6 +14,9 @@ const KIND = {
 };
 
 const STARTERS = [
+  'Who needs attention today?',
+  'How is Zainab getting on with her medicines?',
+  'Does amlodipine interact with bisoprolol?',
   'Book Grace a diabetes review next Tuesday at 9:30 in the Diabetes Clinic',
   'Add a kidney function test for Zainab by Friday',
   'Note that Tola’s son will bring her to clinic from now on'
@@ -95,8 +98,11 @@ export function AssistantPanel({ onClose, routePatientId }) {
     const id = `${Date.now()}`;
     setTurns((current) => [...current, { id, instruction: instruction.trim(), status: 'drafting' }]);
     setText('');
+    // The last few questions and answers, so a follow-up like "and her visits?" makes sense.
+    const history = turns.filter((turn) => turn.draft?.mode === 'answer').slice(-3)
+      .flatMap((turn) => [{ role: 'user', content: turn.instruction }, { role: 'assistant', content: turn.draft.reply }]);
     try {
-      const response = await CareLoopAPI.draftAssistantActions({ text: instruction, patient_id: forPatient || undefined });
+      const response = await CareLoopAPI.draftAssistantActions({ text: instruction, patient_id: forPatient || undefined, history });
       updateTurn(id, { status: 'draft', draft: response.draft });
       if (response.draft.patient && !patientId) setPatientId(response.draft.patient.id);
     } catch (requestError) {
@@ -143,7 +149,7 @@ export function AssistantPanel({ onClose, routePatientId }) {
       <header className="assistant-head">
         <div>
           <h2 id="assistant-title">Assistant</h2>
-          <p>Type or say what you want done for a patient. Nothing is saved until you confirm.</p>
+          <p>Ask about your patients, or say what you want done. Nothing is saved until you confirm.</p>
         </div>
         <button type="button" className="btn btn-quiet btn-icon" onClick={onClose} aria-label="Close the assistant"><X aria-hidden="true" size={20} /></button>
       </header>
@@ -163,13 +169,13 @@ export function AssistantPanel({ onClose, routePatientId }) {
             <ul>
               {STARTERS.map((starter) => <li key={starter}><button type="button" className="assistant-starter" onClick={() => { setText(starter); inputRef.current?.focus(); }}>{starter}</button></li>)}
             </ul>
-            <p className="hint">It can add medicine and test reminders, book visits, send an email reminder, ask Tomi to call, or write a note on the timeline.</p>
+            <p className="hint">It can answer questions about your patients, look up a medicine, and explain a report you paste in. It can also add medicine and test reminders, book visits, send an email reminder, ask Tomi to call, or write a note on the timeline.</p>
           </div>
         )}
         {turns.map((turn) => (
           <div key={turn.id} className="assistant-turn">
             <p className="assistant-said"><span className="sr-only">You: </span>{turn.instruction}</p>
-            {turn.status === 'drafting' && <p className="assistant-reply is-thinking">Working out the changes…</p>}
+            {turn.status === 'drafting' && <p className="assistant-reply is-thinking">Thinking…</p>}
             {turn.status === 'failed' && <p className="assistant-reply"><AlertCircle aria-hidden="true" size={16} />{turn.message}</p>}
             {turn.draft && <DraftCard turn={turn} onChoosePatient={choosePatient} onEdit={editAction} onRemove={removeAction} onConfirm={confirm} onDiscard={() => updateTurn(turn.id, { status: 'discarded' })} />}
           </div>
@@ -177,14 +183,14 @@ export function AssistantPanel({ onClose, routePatientId }) {
       </div>
 
       <form className="assistant-compose" onSubmit={(event) => { event.preventDefault(); draft(text); }}>
-        <label htmlFor="assistant-input" className="sr-only">Instruction{selected ? ` for ${selected.name}` : ''}</label>
+        <label htmlFor="assistant-input" className="sr-only">Question or instruction{selected ? ` about ${selected.name}` : ''}</label>
         <textarea
           id="assistant-input"
           ref={inputRef}
           className="textarea"
           rows={3}
           value={text}
-          placeholder={selected ? `What should change for ${selected.name.split(' ')[0]}?` : 'Book Grace a review next Tuesday at 9:30'}
+          placeholder={selected ? `Ask about ${selected.name.split(' ')[0]}, or say what should change` : 'Who needs attention today?'}
           onChange={(event) => setText(event.target.value)}
           onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); draft(text); } }}
           aria-describedby="assistant-compose-hint"
@@ -206,8 +212,31 @@ export function AssistantPanel({ onClose, routePatientId }) {
   );
 }
 
+// The API answers in plain text; lines that start with "- " are shown as a list.
+function AnswerText({ text }) {
+  const blocks = [];
+  text.split('\n').map((line) => line.trim()).filter(Boolean).forEach((line) => {
+    const item = line.match(/^[-•*]\s+(.*)$/);
+    const last = blocks[blocks.length - 1];
+    if (item && last?.list) last.items.push(item[1]);
+    else if (item) blocks.push({ list: true, items: [item[1]] });
+    else blocks.push({ list: false, text: line });
+  });
+  return blocks.map((block, index) => (block.list
+    ? <ul key={index} className="assistant-answer-list">{block.items.map((item, at) => <li key={at}>{item}</li>)}</ul>
+    : <p key={index}>{block.text}</p>));
+}
+
 function DraftCard({ turn, onChoosePatient, onEdit, onRemove, onConfirm, onDiscard }) {
   const { draft, status, results } = turn;
+  if (draft.mode === 'answer') {
+    return (
+      <div className="assistant-reply">
+        <AnswerText text={draft.reply} />
+        {draft.patient && <Link className="assistant-link" to={`/patients/${draft.patient.id}`}>Open {draft.patient.name}’s record</Link>}
+      </div>
+    );
+  }
   if (draft.needs_patient) {
     return (
       <div className="assistant-reply">

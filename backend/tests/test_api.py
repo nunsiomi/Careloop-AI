@@ -278,23 +278,29 @@ def test_worker_routes_need_the_service_token(client):
     assert client.post("/api/voice/calls", json={"direction": "inbound"}).status_code == 401
 
 
-def test_worker_phone_call_pin_context_and_safety_check(client):
+def test_worker_knows_callers_by_number_without_a_pin(client):
     headers = {"Authorization": "Bearer test-worker-token"}
-    call = client.post("/api/voice/calls", json={"direction": "inbound", "phone_e164": "+2348000000101"}, headers=headers).json()["call"]
-    assert client.get(f"/api/voice/calls/{call['id']}/context", headers=headers).status_code == 403
-
-    wrong = client.post(f"/api/voice/calls/{call['id']}/verify-pin", json={"phone_e164": "+2348000000101", "pin": "0000"}, headers=headers).json()
-    unknown = client.post(f"/api/voice/calls/{call['id']}/verify-pin", json={"phone_e164": "+2348000000999", "pin": "1234"}, headers=headers).json()
-    assert wrong["ok"] is False and unknown["ok"] is False and set(wrong) == set(unknown)
-
-    verified = client.post(f"/api/voice/calls/{call['id']}/verify-pin", json={"phone_e164": "+2348000000101", "pin": "1234"}, headers=headers).json()
-    assert verified == {"ok": True, "patient_id": "p-zainab"}
+    call = client.post("/api/voice/calls", json={"direction": "inbound", "phone_e164": "0800 000 0101"}, headers=headers).json()["call"]
+    assert call["known"] is True and call["patient_id"] == "p-zainab" and call["language"] == "Hausa"
     context = client.get(f"/api/voice/calls/{call['id']}/context", headers=headers).json()["context"]
     assert context["patient"]["first_name"] == "Zainab" and context["plan"]["status"] == "approved"
 
     assert client.post(f"/api/voice/calls/{call['id']}/turns/check", json={"text": "I took it", "language": "ha"}, headers=headers).json() == {"action": "continue"}
     escalated = client.post(f"/api/voice/calls/{call['id']}/turns/check", json={"text": "my chest hurts", "language": "ha"}, headers=headers).json()
     assert escalated["action"] == "escalate" and store().get("escalations", escalated["escalation"]["id"])["call_id"] == call["id"]
+
+
+def test_unknown_caller_gets_nothing_about_anyones_care(client):
+    headers = {"Authorization": "Bearer test-worker-token"}
+    call = client.post("/api/voice/calls", json={"direction": "inbound", "phone_e164": "+2348000000999"}, headers=headers).json()["call"]
+    assert call["known"] is False and call["patient_id"] is None
+    assert client.get(f"/api/voice/calls/{call['id']}/context", headers=headers).status_code == 403
+    assert client.post(f"/api/voice/calls/{call['id']}/medicine", json={"name": "amlodipine"}, headers=headers).status_code == 403
+    assert client.post(f"/api/voice/calls/{call['id']}/turns/check", json={"text": "what is careloop", "language": "en"}, headers=headers).json() == {"action": "continue"}
+    # An emergency still gets the emergency line, with no record to attach it to.
+    assert client.post(f"/api/voice/calls/{call['id']}/turns/check", json={"text": "my chest hurts", "language": "en"}, headers=headers).json() == {"action": "escalate", "escalation": None}
+    client.post(f"/api/voice/calls/{call['id']}/end", json={"outcome": "unknown_caller"}, headers=headers)
+    assert store().get("calls", call["id"])["outcome"] == "Caller not registered; told about CareLoop"
 
 
 # ----- assistant and demo
@@ -317,9 +323,8 @@ def test_scripted_browser_voice_when_livekit_is_not_set_up(client, mailbox):
     assert session["mode"] == "mock"
 
     greeting = client.post(f"/api/voice/sessions/{session['id']}/input", json={}).json()
-    assert greeting["pin_required"] is True
-    after_pin = client.post(f"/api/voice/sessions/{session['id']}/input", json={"pin": "1234"}).json()
-    assert after_pin["turns"][0]["transcript"].startswith("Thank you, Tola.")
+    assert not greeting.get("pin_required")  # signed in to the app, so no PIN
+    assert greeting["turns"][0]["transcript"].startswith("Hello Tola, this is Tomi")
 
 
 # ----- assignment and facility admin
