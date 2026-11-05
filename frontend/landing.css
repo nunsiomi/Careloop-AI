@@ -21,6 +21,20 @@
 .landing-section { display: grid; gap: var(--space-5); margin-top: var(--space-12); }
 .landing-section h2 { max-width: 22ch; font-size: var(--text-2xl); font-weight: 700; letter-spacing: -0.025em; }
 
+/* The patient's journey: four stops joined by a line, down on phones and across on wide screens. */
+.journey { display: grid; list-style: none; }
+.journey-stop { position: relative; display: grid; grid-template-columns: 56px minmax(0, 1fr); column-gap: var(--space-4); row-gap: var(--space-1); padding-bottom: var(--space-6); }
+.journey-stop::after { content: ''; position: absolute; top: 60px; bottom: 4px; left: 27px; width: 2px; background: var(--purple-200); }
+.journey-stop:last-child::after { display: none; }
+.journey-icon { grid-row: span 2; display: grid; width: 56px; height: 56px; place-items: center; border-radius: var(--radius-round); background: var(--purple-700); color: var(--white); }
+.journey-stop:first-child .journey-icon { background: var(--aubergine-950); box-shadow: 0 0 0 4px var(--purple-200); }
+.journey-stop:last-child .journey-icon { background: var(--marigold-400); color: var(--ink-900); }
+.journey-stop h3 { align-self: end; font-family: var(--font-body); font-size: var(--text-md); font-weight: 700; letter-spacing: 0; }
+.journey-stop p { color: var(--ink-700); }
+
+.journey-note { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--space-3); max-width: 72ch; padding: var(--space-4) var(--space-5); border: 1.5px solid var(--purple-300); border-radius: var(--radius-lg); background: var(--purple-100); color: var(--ink-900); }
+.journey-note svg { margin-top: 2px; color: var(--purple-700); }
+
 /* A true sequence, so it is numbered. */
 .flow { display: grid; list-style: none; counter-reset: flow; }
 .flow li { position: relative; display: grid; gap: var(--space-1); max-width: 64ch; padding: 0 0 var(--space-6) var(--space-12); counter-increment: flow; }
@@ -47,4 +61,9 @@
 
 @media (min-width: 1024px) {
   .channels { grid-template-columns: repeat(4, 1fr); }
+  .journey { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-6); }
+  .journey-stop { grid-template-columns: minmax(0, 1fr); align-content: start; row-gap: var(--space-2); padding-bottom: 0; }
+  .journey-icon { grid-row: auto; margin-bottom: var(--space-2); }
+  .journey-stop::after { top: 27px; bottom: auto; left: 72px; right: calc(-1 * var(--space-6) + 16px); width: auto; height: 2px; }
+  .journey-stop h3 { align-self: start; }
 }

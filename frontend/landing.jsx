@@ -1,10 +1,18 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
-import { Mail, Mic, Phone, PhoneIncoming } from 'lucide-react';
+import { Building2, ClipboardCheck, Info, Mail, MessageCircle, Mic, Phone, PhoneIncoming, Ticket } from 'lucide-react';
 import LoopArt from './shared/LoopArt.jsx';
 import './shared/fonts.js';
 import './shared/base.css';
 import './landing.css';
+
+// The patient's side of the journey, as four stops. The last one is Tomi's, so it is marigold.
+const JOURNEY = [
+  [Building2, 'Your care facility', 'A hospital, pharmacy, clinic or care home, wherever you are. This is where CareLoop starts.'],
+  [ClipboardCheck, 'Your care team sets up your plan', 'They add you to CareLoop and approve your plan: medicines, visits and tests.'],
+  [Ticket, 'You get an invite', 'A link by email, or an invite code from your care team. It is your way in.'],
+  [MessageCircle, 'Tomi keeps in touch', 'Reminders, calls and chat at home, in your language. Your care team sees every reply.']
+];
 
 const FLOW = [
   ['A nurse or doctor adds the patient', 'They paste in the discharge note, the same one the patient goes home with.'],
@@ -29,7 +37,7 @@ function Landing() {
         <p className="landing-brand"><span className="logo-mark" aria-hidden="true" />CareLoop</p>
         <LoopArt />
         <h1>Care that keeps going after the patient goes home</h1>
-        <p className="landing-lede">Most patients leave a hospital, clinic or pharmacy with a plan: medicines, a check-up, a blood test. CareLoop helps them follow it at home. Tomi, an AI assistant, sends reminders and checks in by text, phone call or chat, in Hausa, Yorùbá, Igbo or English. Their care team approves every plan and sees every reply.</p>
+        <p className="landing-lede">Most patients leave a hospital, clinic or pharmacy with a plan: medicines, a check-up, a blood test. CareLoop helps them follow it at home. Tomi, our AI assistant, sends reminders and checks in by text, phone call or chat, in Hausa, Yorùbá, Igbo or English. Their care team approves every plan and sees every reply.</p>
         <nav className="landing-doors" aria-label="Sign in">
           <a className="door door-patient" href="/patient/">
             <span className="door-title">I am a patient or family helper</span>
@@ -43,6 +51,23 @@ function Landing() {
       </header>
 
       <main className="landing-main">
+        <section className="landing-section" aria-labelledby="journey-title">
+          <h2 id="journey-title">It all starts at your care facility</h2>
+          <ol className="journey">
+            {JOURNEY.map(([Icon, title, text]) => (
+              <li key={title} className="journey-stop">
+                <span className="journey-icon"><Icon aria-hidden="true" /></span>
+                <h3>{title}</h3>
+                <p>{text}</p>
+              </li>
+            ))}
+          </ol>
+          <aside className="journey-note" aria-label="Joining as a patient">
+            <Info aria-hidden="true" />
+            <p><strong>You cannot sign up as a patient on your own.</strong> You join CareLoop only when your care facility invites you. No invite yet? Ask the care team that looks after you.</p>
+          </aside>
+        </section>
+
         <section className="landing-section" aria-labelledby="flow-title">
           <h2 id="flow-title">How it works</h2>
           <ol className="flow">
@@ -61,7 +86,7 @@ function Landing() {
           </ul>
         </section>
 
-        <p className="landing-note">Tomi is an AI assistant, not a doctor. In an emergency, go to the nearest hospital or call 112.</p>
+        <p className="landing-note">Tomi is our AI assistant, not a doctor. In an emergency, go to the nearest hospital or call 112.</p>
         <p className="landing-note"><a href="patient/#/privacy">How CareLoop uses your information</a> and <a href="patient/#/terms">terms of use</a>.</p>
       </main>
     </>
