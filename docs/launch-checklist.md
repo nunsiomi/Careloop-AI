@@ -38,7 +38,9 @@ until there is a provider (Termii needs a CAC registration). Apply for the voice
 - [ ] **LiveKit SIP trunk** linked to that phone number → `LIVEKIT_SIP_TRUNK_ID`. — Nunsi
 - [ ] **Email sending** (needed now): a Gmail app password (`smtp.gmail.com`) or Brevo (`smtp-relay.brevo.com`) →
   `SMTP_HOST`, `SMTP_USER`, `SMTP_PASSWORD`, `EMAIL_FROM`; Resend once there is a domain. Then send one real reminder
-  and one sign-in code to a team inbox. — Olamide
+  and one sign-in code to a team inbox. Railway's Hobby plan blocks SMTP ports, so on Railway send through the Gmail API
+  instead (`EMAIL_PROVIDER=gmail`, `GMAIL_CLIENT_ID`, `GMAIL_CLIENT_SECRET`, `GMAIL_REFRESH_TOKEN` from
+  `backend/gmail_token.py`); failures now show in the logs as "Email to … failed via …". — Olamide
 - [ ] **Termii** (on hold until CAC registration; email covers every code and reminder for now) → `TERMII_API_KEY`, `TERMII_BASE_URL` (both on the Termii dashboard). Top up the Termii wallet: texts,
   calls and email codes are paid per message, not covered by the Engage Starter plan. Tick after a real code by each
   route to a Nigerian number. Termii only reads out codes on calls; Tomi's calls still need the SIP number above. — Nunsi

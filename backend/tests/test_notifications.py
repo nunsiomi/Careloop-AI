@@ -1,5 +1,6 @@
 # backend/tests/test_notifications.py
 # Email reminders (doc v2, section 8): generic wording, quiet hours, consent at send time, retries.
+import base64
 import re
 from datetime import datetime, timedelta
 from unittest.mock import AsyncMock
@@ -236,3 +237,45 @@ async def test_sample_addresses_are_never_really_emailed(monkeypatch):
 
     assert sample.ok and real.ok
     assert [message["To"] for message in sent] == ["someone@gmail.com"]
+
+
+@pytest.mark.parametrize("raw, expected", [
+    ("CareLoop <nunsi@gmail.com>", ("CareLoop", "nunsi@gmail.com")),
+    ("CareLoop nunsi@gmail.com", ("CareLoop", "nunsi@gmail.com")),
+    ("nunsi@gmail.com", ("CareLoop", "nunsi@gmail.com")),
+])
+def test_sender_reads_email_from_with_or_without_brackets(monkeypatch, raw, expected):
+    monkeypatch.setenv("EMAIL_FROM", raw)
+    assert email_adapter.sender() == expected
+
+
+@pytest.mark.asyncio
+async def test_gmail_api_sends_over_https_and_failures_are_logged(monkeypatch, caplog):
+    import json
+    seen = []
+
+    def handler(request):
+        seen.append(str(request.url))
+        if request.url.host == "oauth2.googleapis.com":
+            assert b"refresh_token=rt-test" in request.content
+            return httpx.Response(200, json={"access_token": "at-test", "expires_in": 3599})
+        assert request.headers["Authorization"] == "Bearer at-test"
+        raw = base64.urlsafe_b64decode(json.loads(request.content)["raw"]).decode()
+        if "Subject: Code ok" in raw:
+            assert "From: CareLoop <nunsi@gmail.com>" in raw and "To: someone@gmail.com" in raw
+            return httpx.Response(200, json={"id": "gm-1"})
+        return httpx.Response(403, json={"error": {"message": "Insufficient Permission"}})
+
+    monkeypatch.delenv("EMAIL_PROVIDER", raising=False)
+    for name, value in {"GMAIL_CLIENT_ID": "cid", "GMAIL_CLIENT_SECRET": "cs", "GMAIL_REFRESH_TOKEN": "rt-test",
+                        "EMAIL_FROM": "CareLoop <nunsi@gmail.com>"}.items():
+        monkeypatch.setenv(name, value)
+    monkeypatch.setitem(email_adapter._gmail_token, "expires", 0.0)
+    monkeypatch.setattr(email_adapter.httpx, "AsyncClient", lambda **kw: REAL_ASYNC_CLIENT(transport=httpx.MockTransport(handler), **kw))
+
+    sent = await email_adapter.send_email("someone@gmail.com", "Code ok", "482913")
+    assert sent.ok and sent.provider_id == "gm-1"
+    failed = await email_adapter.send_email("someone@gmail.com", "Code", "482913")
+    assert not failed.ok and "403" in failed.error
+    assert seen.count("https://oauth2.googleapis.com/token") == 1  # the access token is reused
+    assert "failed via gmail" in caplog.text
