@@ -39,7 +39,14 @@ until there is a provider (Termii needs a CAC registration). Apply for the voice
 - [ ] **Email sending** (needed now): a Gmail app password (`smtp.gmail.com`) or Brevo (`smtp-relay.brevo.com`) →
   `SMTP_HOST`, `SMTP_USER`, `SMTP_PASSWORD`, `EMAIL_FROM`; Resend once there is a domain. Then send one real reminder
   and one sign-in code to a team inbox. — Olamide
-- [ ] **SMS provider** (later; Africa's Talking or Termii) → `SMS_PROVIDER`, `SMS_API_KEY`. — Olamide
+- [ ] **Termii** (on hold until CAC registration; email covers every code and reminder for now) → `TERMII_API_KEY`, `TERMII_BASE_URL` (both on the Termii dashboard). Top up the Termii wallet: texts,
+  calls and email codes are paid per message, not covered by the Engage Starter plan. Tick after a real code by each
+  route to a Nigerian number. Termii only reads out codes on calls; Tomi's calls still need the SIP number above. — Nunsi
+- [ ] **Termii SMS** → `SMS_PROVIDER=termii`, `SMS_SENDER_ID` (sender ID approved by Termii, needs CAC registration),
+  and ask Termii support to switch on the DND route (`TERMII_SMS_CHANNEL=dnd`, the default). — Nunsi
+- [ ] **Termii email codes** → create an email OTP config on the Termii dashboard (template wording must not say how long
+  the code lasts: patient codes last 5 minutes, staff codes 15) and set `TERMII_EMAIL_CONFIG_ID`. Reminders,
+  invites and reset links stay on SMTP. — Nunsi
 - [ ] **SMS sender ID registered** (later; `SMS_SENDER_ID`), on the transactional route so codes reach DND numbers. — Olamide
 - [ ] **Hosted Postgres** (Neon or Supabase) → `DATABASE_URL` for the deployed backend. — Olamide
 - [ ] **Backend hosting** (Render, Railway or Fly.io) for FastAPI, the reminder scheduler and the voice worker. — Olamide
@@ -63,7 +70,8 @@ The contract is `docs/api_shapes.md`. Each route should return exactly what the 
   (done by Nunsi, 3 Nov 2026: `services/plans.py`; approval creates the tasks and visits, and emails the patient an invite)
 - [x] Patient sign-in: code by email (to the address on the account, never shown) or voice call, PIN on a remembered
   phone, invite codes that collect the person's email, caregivers. SMS codes later. — Olamide (done by Nunsi, 3 Nov 2026; codes by phone call
-  answer 503 until there is telephony)
+  answer 503 until there is telephony; 4 Nov 2026: codes by phone call go through Termii Voice Call once `TERMII_API_KEY`
+  and `TERMII_BASE_URL` are set, `backend/app/adapters/termii.py`)
 - [x] Staff sign-in: password, 6-digit email code, password reset, idle lock. — Olamide (done by Nunsi, 3 Nov 2026)
 - [x] Staff sign-up with hospital join code (lockout after 5 wrong codes), invite links. Never return `demo_join_code`. — Olamide
   (done by Nunsi, 3 Nov 2026)

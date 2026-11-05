@@ -10,6 +10,7 @@ os.environ.update({
     "CARELOOP_SCHEDULER": "0", "CARELOOP_DEMO": "1", "CARELOOP_DISABLE_RATE_LIMITS": "1", "EMAIL_PROVIDER": "console",
     "VOICE_SERVICE_TOKEN": "test-worker-token", "GROQ_API_KEY": "mock_key_for_testing", "APP_URL": "http://localhost:5173",
     "LIVEKIT_URL": "", "LIVEKIT_API_KEY": "", "LIVEKIT_API_SECRET": "", "LIVEKIT_SIP_TRUNK_ID": "", "SMS_PROVIDER": "",
+    "VOICE_CODE_PROVIDER": "", "TERMII_API_KEY": "", "TERMII_BASE_URL": "", "SMS_SENDER_ID": "", "TERMII_EMAIL_CONFIG_ID": "",
 })
 
 

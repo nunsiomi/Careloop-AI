@@ -8,11 +8,13 @@ import os
 import secrets
 
 from app.adapters.email import send_email
+from app.adapters.sms import sms_available
+from app.adapters.termii import call_code, voice_codes_available
 from app.agents import language as language_agent
 from app.db import store
 from app.security import check_code, check_secret, hash_code, hash_secret, new_session_token, password_problem, rate_limit, session_key
 from app.services.activity_log import log_event
-from app.services.notifications import send_sign_in_code
+from app.services.notifications import send_code_email, send_sign_in_code, send_sign_in_code_sms
 from app.util import (EMAIL_PATTERN, ApiError, first_name, in_seconds, make_id, mask_email, mask_phone, normalize_phone,
                       now_iso, six_digits, token)
 
@@ -27,8 +29,8 @@ def app_url(path: str = "") -> str:
     return (os.getenv("APP_URL") or "http://localhost:5173").rstrip("/") + path
 
 
-async def _email_or_fail(to: str, subject: str, text: str) -> None:
-    result = await send_email(to, subject, text)
+async def _email_code_or_fail(to: str, code: str, subject: str, text: str) -> None:
+    result = await send_code_email(to, code, subject, text)
     if not result.ok:
         raise ApiError("We could not send the email just now. Try again in a minute.", 502)
 
@@ -59,9 +61,9 @@ def _challenge_view(challenge: dict) -> dict:
 
 
 def _check_via(via: str) -> str:
-    if via in ("voice", "sms"):
+    if (via == "sms" and not sms_available()) or (via == "voice" and not voice_codes_available()):
         raise ApiError("Codes by phone call or text message are not available yet. Choose email.", 503)
-    if via != "email":
+    if via not in ("email", "voice", "sms"):
         raise ApiError("Choose how to get your code.")
     return via
 
@@ -69,6 +71,14 @@ def _check_via(via: str) -> str:
 async def _send_challenge_code(challenge: dict) -> None:
     code = six_digits()
     challenge.update(code_hash=hash_code(code), tries=0, expires_at=in_seconds(CODE_TTL), resend_at=in_seconds(RESEND_AFTER))
+    if challenge["via"] in ("voice", "sms"):
+        # Only call or text numbers we know: an account holder, or the phone on an invite. Unknown numbers get the same answer.
+        if challenge.get("holder") or challenge["purpose"] == "invite":
+            by_call = challenge["via"] == "voice"
+            result = await (call_code if by_call else send_sign_in_code_sms)(challenge["phone_e164"], code)
+            if not result.ok and challenge["purpose"] == "invite":
+                raise ApiError(f"We could not {'call' if by_call else 'text'} you just now. Try again in a minute, or choose email.", 502)
+        return
     if challenge.get("email"):  # unknown number or no email on file: nothing is sent, same answer
         result = await send_sign_in_code(challenge["email"], code)
         if not result.ok and challenge.get("show_email"):
@@ -99,6 +109,7 @@ async def start_invite_sign_in(code: str, via: str = "email", phone: str | None 
         e164 = normalize_phone(phone)
         if not e164:
             raise ApiError("Enter your own mobile number, for example 0803 123 4567.")
+    rate_limit(f"otp-phone:{e164}", 5, 600, "Too many codes for this number. Wait 10 minutes, then try again.")
     address = str(email or "").strip()
     if _check_via(via) == "email" and not EMAIL_PATTERN.match(address):
         raise ApiError("Enter your email address, for example name@example.com.")
@@ -114,6 +125,7 @@ async def resend_code(challenge_id: str, via: str | None = None) -> dict:
         raise ApiError("This code has expired. Start again.", 410)
     if challenge["resend_at"] > now_iso():
         raise ApiError("Wait a moment before asking for another code.", 429)
+    rate_limit(f"otp-phone:{challenge['phone_e164']}", 5, 600, "Too many codes for this number. Wait 10 minutes, then try again.")
     challenge["via"] = _check_via(via or challenge["via"])
     await _send_challenge_code(challenge)
     return _challenge_view(challenge)
@@ -392,7 +404,7 @@ async def staff_sign_in(email: str, password: str, client: str = "") -> dict:
     code = six_digits()
     pending = store().add("mfa_tokens", {"id": token("mfa"), "user_id": user["id"], "expires_at": in_seconds(STAFF_CODE_TTL), "tries": 0,
                                          "code_hash": hash_code(code), "resend_at": in_seconds(RESEND_AFTER)})
-    await _email_or_fail(user["email"], "Your CareLoop sign-in code", _code_email(code, "sign in"))
+    await _email_code_or_fail(user["email"], code, "Your CareLoop sign-in code", _code_email(code, "sign in"))
     return {"mfa_token": pending["id"], "masked_email": mask_email(user["email"]), "resend_in": RESEND_AFTER}
 
 
@@ -409,7 +421,7 @@ async def resend_staff_code(mfa_token: str) -> dict:
     code = six_digits()
     pending.update(code_hash=hash_code(code), tries=0, resend_at=in_seconds(RESEND_AFTER))
     user = store().get("staff", pending["user_id"])
-    await _email_or_fail(user["email"], "Your CareLoop sign-in code", _code_email(code, "sign in"))
+    await _email_code_or_fail(user["email"], code, "Your CareLoop sign-in code", _code_email(code, "sign in"))
     return {"resend_in": RESEND_AFTER}
 
 
@@ -491,8 +503,17 @@ def accept_staff_invite(invite_token: str, password: str, device: str) -> tuple[
     return staff_session_view(session), raw
 
 
+def _shown_join_code(facility: dict) -> dict:
+    """CARELOOP_SHOW_JOIN_CODES=1 (for judges and testers) shows the code of the invented sample facilities only,
+    so anyone can try staff sign-up. A real facility's code is never returned."""
+    from app.seed import FACILITIES
+    if os.getenv("CARELOOP_SHOW_JOIN_CODES") == "1" and facility["id"] in {item[0] for item in FACILITIES}:
+        return {"demo_join_code": facility["join_code"]}
+    return {}
+
+
 def list_facilities() -> dict:
-    facilities = [{key: item[key] for key in ("id", "type", "name", "city", "country")} for item in store().all("facilities")]
+    facilities = [{**{key: item[key] for key in ("id", "type", "name", "city", "country")}, **_shown_join_code(item)} for item in store().all("facilities")]
     return {"types": FACILITY_TYPES, "facilities": facilities, "roles": STAFF_ROLES}
 
 
@@ -539,7 +560,7 @@ async def _send_signup_email(signup: dict, code: str) -> None:
                          "Someone tried to create a CareLoop account with this email address, but you already have one. "
                          f"Sign in instead ({app_url('/clinician/#/sign-in')}), or reset your password if you have forgotten it.")
     else:
-        await _email_or_fail(signup["email"], "Confirm your email for CareLoop", _code_email(code, "confirm your email"))
+        await _email_code_or_fail(signup["email"], code, "Confirm your email for CareLoop", _code_email(code, "confirm your email"))
 
 
 async def resend_signup_code(signup_token: str) -> dict:

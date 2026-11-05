@@ -32,9 +32,9 @@ const SAMPLE_NOTES = [
   { id: 'note-c', title: 'Sample C: diabetes review', text: 'Discharge summary, Kestrel General Hospital.\nMetformin 500 mg tablet, one tablet twice daily with food at 08:00 and 20:00.\nReview at the Diabetes Clinic in 14 days at 09:30.\nReturn to hospital at once for confusion or fainting.' }
 ];
 
-/* ---------- Email (and later SMS) reminders (doc v2, section 8) ----------
+/* ---------- Text and email reminders (doc v2, section 8) ----------
    Texts and emails are generic: they never name a medicine, condition or test. They point the patient
-   back to the app or to Tomi's phone line. Replies are not read. SMS is off until there is a provider (MESSAGE_CHANNELS). */
+   back to the app or to Tomi's phone line. Replies are not read. SMS follows SMS_AVAILABLE (MESSAGE_CHANNELS). */
 const MESSAGE_TEMPLATES = {
   medicine: { title: 'Medicine reminder', body: (first) => `CareLoop: Hello ${first}, you have a reminder from ${FACILITY}. Open the CareLoop app or call Tomi on ${TOMI_LINE}. Do not reply.` },
   test: { title: 'Test reminder', body: (first) => `CareLoop: Hello ${first}, you have a reminder from ${FACILITY}. Open the CareLoop app or call Tomi on ${TOMI_LINE}. Do not reply.` },

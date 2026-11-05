@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 from unittest.mock import AsyncMock
 from zoneinfo import ZoneInfo
 
+import httpx
 import pytest
 
 from app.adapters import SendResult
@@ -39,11 +40,20 @@ def test_no_reminders_without_consent_or_email():
 
 def test_sms_stays_off_until_set_up(monkeypatch):
     monkeypatch.setenv("SMS_PROVIDER", "termii")
-    monkeypatch.setenv("SMS_API_KEY", "x")
+    monkeypatch.setenv("TERMII_API_KEY", "x")  # no base URL or sender ID yet
 
     reminders = notifications.plan_reminders(patient(channels=["sms", "email"]), [task(NOW + timedelta(hours=4))], [], NOW)
 
     assert [item.channel for item in reminders] == ["email"]
+
+
+def test_sms_reminders_go_by_termii_once_set_up(monkeypatch):
+    for name, value in {"SMS_PROVIDER": "termii", "TERMII_API_KEY": "x", "TERMII_BASE_URL": "https://termii.test", "SMS_SENDER_ID": "CareLoop"}.items():
+        monkeypatch.setenv(name, value)
+
+    reminders = notifications.plan_reminders(patient(channels=["sms", "email"]), [task(NOW + timedelta(hours=4))], [], NOW)
+
+    assert [item.channel for item in reminders] == ["sms", "email"]
 
 
 def test_quiet_hours_move_to_seven_in_the_morning():
@@ -138,3 +148,91 @@ async def test_console_provider_sends_nothing(monkeypatch):
     result = await email_adapter.send_email("tola.adeyemi@kestrelmail.ng", "Subject", "Body")
 
     assert result.ok and result.provider_id
+
+
+# ----- Termii voice calls for sign-in codes
+
+REAL_ASYNC_CLIENT = httpx.AsyncClient
+
+
+def _termii(monkeypatch, handler):
+    from app.adapters import termii
+    monkeypatch.setenv("TERMII_API_KEY", "tk_test")
+    monkeypatch.setenv("TERMII_BASE_URL", "https://termii.test/")
+    monkeypatch.setattr(termii.httpx, "AsyncClient", lambda **kw: REAL_ASYNC_CLIENT(transport=httpx.MockTransport(handler), **kw))
+    return termii
+
+
+@pytest.mark.asyncio
+async def test_termii_call_sends_digits_without_plus_and_reads_the_message_id(monkeypatch):
+    import json
+    seen = {}
+
+    def handler(request):
+        seen.update(url=str(request.url), body=json.loads(request.content))
+        return httpx.Response(200, json={"code": "ok", "message_id": "301754", "message": "Successfully Sent"})
+
+    result = await _termii(monkeypatch, handler).call_code("+2348000000101", "482913")
+    assert result.ok and result.provider_id == "301754"
+    assert seen["url"] == "https://termii.test/api/sms/otp/call"
+    assert seen["body"] == {"api_key": "tk_test", "phone_number": "2348000000101", "code": 482913}
+
+
+@pytest.mark.asyncio
+async def test_termii_refusal_is_not_retried_but_a_server_error_is(monkeypatch):
+    refused = await _termii(monkeypatch, lambda request: httpx.Response(400, json={"message": "Insufficient balance"})).call_code("+2348000000101", "111111")
+    assert not refused.ok and not refused.retryable and "Insufficient balance" in refused.error
+    busy = await _termii(monkeypatch, lambda request: httpx.Response(503, text="busy")).call_code("+2348000000101", "111111")
+    assert not busy.ok and busy.retryable
+
+
+@pytest.mark.asyncio
+async def test_termii_sms_uses_the_sender_id_and_the_dnd_route(monkeypatch):
+    import json
+    seen = {}
+
+    def handler(request):
+        seen.update(url=str(request.url), body=json.loads(request.content))
+        return httpx.Response(200, json={"code": "ok", "message_id_str": "301755", "message": "Successfully Sent"})
+
+    termii = _termii(monkeypatch, handler)
+    monkeypatch.setenv("SMS_SENDER_ID", "CareLoop")
+    result = await termii.send_sms("+2348000000101", "482913 is your CareLoop sign-in code.")
+    assert result.ok and result.provider_id == "301755"
+    assert seen["url"] == "https://termii.test/api/sms/send"
+    assert seen["body"] == {"api_key": "tk_test", "to": "2348000000101", "from": "CareLoop", "sms": "482913 is your CareLoop sign-in code.",
+                            "type": "plain", "channel": "dnd"}
+
+
+@pytest.mark.asyncio
+async def test_sign_in_code_emails_go_by_termii_once_set_up(monkeypatch):
+    import json
+    seen = {}
+
+    def handler(request):
+        seen.update(url=str(request.url), body=json.loads(request.content))
+        return httpx.Response(200, json={"code": "ok", "message_id": "301756"})
+
+    _termii(monkeypatch, handler)
+    monkeypatch.setenv("TERMII_EMAIL_CONFIG_ID", "cfg-1")
+    smtp = AsyncMock()
+    monkeypatch.setattr(notifications, "send_email", smtp)
+
+    result = await notifications.send_sign_in_code("tola.adeyemi@kestrelmail.ng", "482913")
+
+    assert result.ok and not smtp.called
+    assert seen["url"] == "https://termii.test/api/email/otp/send"
+    assert seen["body"] == {"api_key": "tk_test", "email_address": "tola.adeyemi@kestrelmail.ng", "code": "482913", "email_configuration_id": "cfg-1"}
+
+
+@pytest.mark.asyncio
+async def test_sample_addresses_are_never_really_emailed(monkeypatch):
+    monkeypatch.setenv("EMAIL_PROVIDER", "smtp")
+    sent = []
+    monkeypatch.setattr(email_adapter, "_send_smtp", sent.append)
+
+    sample = await email_adapter.send_email("tola.adeyemi@kestrelmail.ng", "Your CareLoop sign-in code", "482913")
+    real = await email_adapter.send_email("someone@gmail.com", "Your CareLoop sign-in code", "482913")
+
+    assert sample.ok and real.ok
+    assert [message["To"] for message in sent] == ["someone@gmail.com"]

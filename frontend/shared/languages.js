@@ -17,8 +17,9 @@ export const READING_LEVELS = [
   { id: 'caregiver', title: 'I help someone with care', detail: 'For a family member or helper.' }
 ];
 
-// Text messages are switched off until CareLoop has an SMS provider (decided by Nunsi, 3 Nov 2026). Reminders
-// and sign-in codes go by email instead. Set this to true to bring SMS back everywhere.
+// Text messages are switched off: Termii needs a CAC registration for a sender ID, so every sign-in code and
+// reminder goes by email (decided by Nunsi, 4 Nov 2026). The Termii adapter (backend/app/adapters/termii.py) is
+// written and tested; set this to true once SMS is configured to bring SMS back everywhere.
 export const SMS_AVAILABLE = false;
 // Channels that carry generic reminder texts, in order of preference.
 export const MESSAGE_CHANNELS = SMS_AVAILABLE ? ['sms', 'email'] : ['email'];

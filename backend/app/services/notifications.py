@@ -5,7 +5,7 @@ The same rules as the frontend mock (frontend/shared/mock-server.js), which the 
 - One message 30 minutes before each pending task, and one at 18:00 the evening before each visit.
 - Nothing is sent between 21:00 and 07:00 in the patient's time zone; those move to 07:00.
 - Only on channels the patient agreed to, checked again at send time, so a withdrawal stops queued messages.
-- Email is the live channel. SMS joins automatically once adapters/sms.py is set up (sms_available()).
+- SMS (Termii) and email (SMTP) are the channels. SMS joins once adapters/sms.py is set up (sms_available()).
 """
 
 import asyncio
@@ -17,6 +17,7 @@ from zoneinfo import ZoneInfo
 
 from app.adapters import SendResult
 from app.adapters.email import send_email
+from app.adapters import termii
 from app.adapters.sms import send_sms, sms_available
 
 QUIET_START, QUIET_END = 21, 7
@@ -161,11 +162,26 @@ async def dispatch(
     return result
 
 
+SMS_CODE_TEXT = "{code} is your CareLoop sign-in code. It works for 5 minutes. Never share it, not even with your care team."
+
+
+async def send_sign_in_code_sms(to_e164: str, code: str) -> SendResult:
+    """Patient and caregiver sign-in codes by text message. Same wording as the mock."""
+    return await send_sms(to_e164, SMS_CODE_TEXT.format(code=code))
+
+
+async def send_code_email(to_email: str, code: str, subject: str, text: str, *, send_mail: Sender | None = None) -> SendResult:
+    """Any sign-in code by email: Termii's email OTP when it is set up (wording from the Termii template), else SMTP."""
+    if send_mail is None and termii.email_codes_ready():
+        return await termii.email_code(to_email, code)
+    return await (send_mail or send_email)(to_email, subject, text)
+
+
 async def send_sign_in_code(to_email: str, code: str, *, send_mail: Sender | None = None) -> SendResult:
-    """Patient and caregiver sign-in codes go by email while there is no SMS provider. Same wording as the mock."""
+    """Patient and caregiver sign-in codes by email. Same wording as the mock."""
     text = (f"Your CareLoop sign-in code is {code}. It works for 5 minutes.\n\n"
             "Never share it, not even with your care team. If you did not ask for it, you can ignore this email.")
-    return await (send_mail or send_email)(to_email, "Your CareLoop sign-in code", text)
+    return await send_code_email(to_email, code, "Your CareLoop sign-in code", text, send_mail=send_mail)
 
 
 def _as_datetime(value: datetime | str) -> datetime:

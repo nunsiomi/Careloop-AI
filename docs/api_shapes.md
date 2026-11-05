@@ -167,7 +167,7 @@ Error rules: sign-in and reset responses must not reveal whether an account exis
 
 ### Patients and family helpers
 
-- Codes are 6 digits, valid 300 s, resend after 60 s, 5 wrong tries per code. Delivery `via` is `email` (the default while there is no SMS provider), `voice` (Tomi reads the code out) or, later, `sms`.
+- Codes are 6 digits, valid 300 s, resend after 60 s, 5 wrong tries per code. Delivery `via` is `email` (the default), `sms` (Termii text message) or `voice` (a phone call reads the code out; Termii Voice Call). `sms` and `voice` answer 503 until Termii is configured, and only numbers on an account or an invite are texted or called.
 - Phone sign-in sends the code to the email address on the account and never shows that address (`masked_email` is null), so the screen cannot reveal whether a number has an account. With no email on file nothing is sent; the person can choose a call instead.
 - Invites ask for the person's own `email`; it is saved to the patient or caregiver once the code is verified, and `masked_email` echoes it back.
 - The PIN is 4 digits. It is the same PIN Tomi asks for on phone calls. 5 wrong PINs locks PIN sign-in until a code is used.

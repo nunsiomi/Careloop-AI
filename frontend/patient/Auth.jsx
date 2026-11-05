@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import { ArrowLeft, Mail, PhoneCall } from 'lucide-react';
+import { ArrowLeft, Mail, MessageSquareText, PhoneCall } from 'lucide-react';
 import { CareLoopAPI } from '../shared/api.js';
 import { CodeInput, IncomingMessage, PhoneField, PinPad, PresenterNote, clock, useCountdown } from '../shared/auth-ui.jsx';
-import { LANGUAGES } from '../shared/languages.js';
+import { LANGUAGES, SMS_AVAILABLE } from '../shared/languages.js';
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 import { BetaChip, ErrorNote, LoadingBlock, useAsync } from '../shared/ui.jsx';
@@ -92,7 +92,7 @@ export function PhoneSignIn({ go, purpose, onChallenge }) {
   return (
     <AuthShell
       title={reset ? 'Make a new PIN' : 'Sign in'}
-      lede={reset ? 'First, we need to check it is you. Enter the phone number you gave your care team.' : 'Enter the phone number you gave your care team. We will send a 6-digit code to the email address on your account.'}
+      lede={reset ? 'First, we need to check it is you. Enter the phone number you gave your care team.' : `Enter the phone number you gave your care team. We will send a 6-digit code ${SMS_AVAILABLE ? 'by text, email or phone call' : 'to the email address on your account'}.`}
       back={{ href: reset ? '#/unlock' : '#/welcome', label: 'Back' }}
       art={false}
     >
@@ -105,6 +105,13 @@ export function PhoneSignIn({ go, purpose, onChallenge }) {
             <Mail aria-hidden="true" size={22} />
             <span><strong>Email</strong><small>To the email address on your account</small></span>
           </label>
+          {SMS_AVAILABLE && (
+            <label className="via-option">
+              <input type="radio" name="via" checked={via === 'sms'} onChange={() => setVia('sms')} />
+              <MessageSquareText aria-hidden="true" size={22} />
+              <span><strong>Text message</strong><small>To this phone number</small></span>
+            </label>
+          )}
           <label className="via-option">
             <input type="radio" name="via" checked={via === 'voice'} onChange={() => setVia('voice')} />
             <PhoneCall aria-hidden="true" size={22} />
@@ -150,10 +157,11 @@ export function VerifyScreen({ go, challenge, onChallenge, onSignedIn }) {
   };
 
   const byCall = challenge.via === 'voice';
+  const byText = challenge.via === 'sms';
   return (
     <AuthShell
       title="Enter your code"
-      lede={byCall ? `Tomi is calling ${challenge.masked_phone} to read out a 6-digit code.` : challenge.masked_email ? `We sent a 6-digit code by email to ${challenge.masked_email}.` : `If ${challenge.masked_phone} has a CareLoop account with an email address, we sent a 6-digit code there.`}
+      lede={byCall ? `Tomi is calling ${challenge.masked_phone} to read out a 6-digit code.` : byText ? `We sent a 6-digit code by text message to ${challenge.masked_phone}.` : challenge.masked_email ? `We sent a 6-digit code by email to ${challenge.masked_email}.` : `If ${challenge.masked_phone} has a CareLoop account with an email address, we sent a 6-digit code there.`}
       back={{ href: challenge.invite_code ? `#/invite/${challenge.invite_code}` : challenge.purpose === 'reset' ? '#/forgot-pin' : '#/sign-in', label: 'Change number' }}
       art={false}
     >
@@ -168,11 +176,12 @@ export function VerifyScreen({ go, challenge, onChallenge, onSignedIn }) {
         <p className="label">No code yet?</p>
         {resendIn > 0 ? <p className="hint">You can ask for another in {clock(resendIn)}.</p> : (
           <div className="resend-actions">
-            <button type="button" className="btn btn-secondary" onClick={() => resend('email')}><Mail aria-hidden="true" size={18} />Email me again</button>
+            <button type="button" className="btn btn-secondary" onClick={() => resend('email')}><Mail aria-hidden="true" size={18} />{challenge.via === 'email' ? 'Email me again' : 'Email me instead'}</button>
+            {SMS_AVAILABLE && <button type="button" className="btn btn-secondary" onClick={() => resend('sms')}><MessageSquareText aria-hidden="true" size={18} />{byText ? 'Text me again' : 'Text me instead'}</button>}
             <button type="button" className="btn btn-secondary" onClick={() => resend('voice')}><PhoneCall aria-hidden="true" size={18} />Call me instead</button>
           </div>
         )}
-        {!byCall && !challenge.masked_email && <p className="hint">No email address on your account? Choose a phone call, or ask your care team to add one.</p>}
+        {!byCall && !byText && !challenge.masked_email && <p className="hint">No email address on your account? Choose {SMS_AVAILABLE ? 'a text or a phone call' : 'a phone call'}, or ask your care team to add one.</p>}
       </div>
       <IncomingMessage message={challenge.demo_message} />
     </AuthShell>
@@ -289,7 +298,7 @@ function InviteDetails({ go, code, onChallenge, signedInAs, onSignOut }) {
       {forHelper ? (
         <PhoneField id="helper-phone" label="Your own phone number" value={phone} onChange={setPhone} invalid={Boolean(error)} describedBy={error ? 'invite-error' : undefined} />
       ) : (
-        <p>To check it is you, we will email you a code, or Tomi can call the number your care team has for you: <strong>{invite.masked_phone}</strong>.</p>
+        <p>To check it is you, we will email you a code, or {SMS_AVAILABLE ? 'text or call' : 'Tomi can call'} the number your care team has for you: <strong>{invite.masked_phone}</strong>.</p>
       )}
       <div className="field">
         <label htmlFor="invite-email">Your email address</label>
@@ -299,6 +308,7 @@ function InviteDetails({ go, code, onChallenge, signedInAs, onSignOut }) {
       {error && <p id="invite-error" className="field-error" role="alert">{error}</p>}
       <div className="auth-actions">
         <button type="button" className="btn btn-primary btn-lg btn-block" disabled={busy || !EMAIL_PATTERN.test(email.trim()) || (forHelper && phone.replace(/\D/g, '').length < 10)} onClick={() => send('email')}><Mail aria-hidden="true" size={20} />Email me a code</button>
+        {SMS_AVAILABLE && <button type="button" className="btn btn-secondary btn-lg btn-block" disabled={busy || (forHelper && phone.replace(/\D/g, '').length < 10)} onClick={() => send('sms')}><MessageSquareText aria-hidden="true" size={20} />Text me a code</button>}
         <button type="button" className="btn btn-secondary btn-lg btn-block" disabled={busy || (forHelper && phone.replace(/\D/g, '').length < 10)} onClick={() => send('voice')}><PhoneCall aria-hidden="true" size={20} />Call me with a code</button>
       </div>
       {!forHelper && <p className="hint">Not {invite.patient_first_name}? Please stop here and let your care team know.</p>}

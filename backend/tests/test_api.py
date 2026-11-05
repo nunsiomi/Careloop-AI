@@ -102,6 +102,49 @@ def test_unknown_number_gets_the_same_answer_and_no_email(client, mailbox):
 def test_codes_by_phone_are_not_offered_yet(client):
     response = client.post("/api/auth/patient/otp", json={"phone": "0800 000 0101", "via": "sms"})
     assert response.status_code == 503
+    assert client.post("/api/auth/patient/otp", json={"phone": "0800 000 0101", "via": "voice"}).status_code == 503  # no Termii key
+
+
+def test_code_by_text_goes_only_to_known_numbers(client, monkeypatch):
+    from app.adapters import SendResult
+    from app.services import identity
+    texts = []
+
+    async def fake_text(to_e164, code):
+        texts.append((to_e164, code))
+        return SendResult(ok=True, provider_id="t-2")
+
+    monkeypatch.setattr(identity, "sms_available", lambda: True)
+    monkeypatch.setattr(identity, "send_sign_in_code_sms", fake_text)
+
+    known = client.post("/api/auth/patient/otp", json={"phone": "0800 000 0101", "via": "sms"}).json()
+    unknown = client.post("/api/auth/patient/otp", json={"phone": "0800 000 0999", "via": "sms"}).json()
+
+    assert set(known) == set(unknown) and known["via"] == unknown["via"] == "sms"
+    assert [to for to, _ in texts] == ["+2348000000101"]
+    verified = client.post(f"/api/auth/patient/otp/{known['challenge_id']}/verify", json={"code": texts[0][1]})
+    assert verified.status_code == 200 and verified.json()["session"]["patient_id"] == "p-zainab"
+
+
+def test_code_by_phone_call_rings_only_known_numbers(client, monkeypatch):
+    from app.adapters import SendResult
+    from app.services import identity
+    calls = []
+
+    async def fake_call(to_e164, code):
+        calls.append((to_e164, code))
+        return SendResult(ok=True, provider_id="t-1")
+
+    monkeypatch.setenv("VOICE_CODE_PROVIDER", "termii")
+    monkeypatch.setattr(identity, "call_code", fake_call)
+
+    known = client.post("/api/auth/patient/otp", json={"phone": "0800 000 0101", "via": "voice"}).json()
+    unknown = client.post("/api/auth/patient/otp", json={"phone": "0800 000 0999", "via": "voice"}).json()
+
+    assert set(known) == set(unknown) and known["via"] == unknown["via"] == "voice"
+    assert [to for to, _ in calls] == ["+2348000000101"]
+    verified = client.post(f"/api/auth/patient/otp/{known['challenge_id']}/verify", json={"code": calls[0][1]})
+    assert verified.status_code == 200 and verified.json()["session"]["patient_id"] == "p-zainab"
 
 
 def test_five_wrong_pins_lock_pin_sign_in(client):
@@ -283,3 +326,14 @@ def test_admin_sees_the_join_code_changes_it_and_removes_staff(client, mailbox):
     assert client.delete(f"/api/admin/staff/{session['user']['id']}").status_code == 409
     assert client.delete(f"/api/admin/staff/{page['staff'][0]['id']}").json()["ok"] is True
     assert [member["name"] for member in client.get("/api/staff").json()["staff"]] == ["Dr. Ada Okafor"]
+
+
+def test_join_codes_show_only_for_sample_facilities_when_switched_on(client, monkeypatch):
+    from app.db import store
+    store().add("facilities", {"id": "real-clinic", "type": "clinic", "name": "A Real Clinic", "city": "Jos", "country": "Nigeria", "join_code": "ARC-1111"})
+    monkeypatch.setenv("CARELOOP_SHOW_JOIN_CODES", "1")
+
+    shown = {item["id"]: item.get("demo_join_code") for item in client.get("/api/facilities").json()["facilities"]}
+
+    assert shown["kestrel"] == "KGH-4821" and shown["real-clinic"] is None
+    assert all("join_code" not in item for item in client.get("/api/facilities").json()["facilities"])

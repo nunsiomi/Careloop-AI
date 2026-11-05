@@ -16,6 +16,10 @@ from app.adapters import SendResult
 
 log = logging.getLogger("careloop.email")
 
+# Invented domains of the sample facility (app/seed.py). Mail to them is printed, never sent: it would bounce
+# back into the sending inbox, or reach a stranger if the domain is ever registered. Real users are unaffected.
+SAMPLE_DOMAINS = {"kestrelmail.ng", "kestrelgeneral.ng"}
+
 
 def email_provider() -> str:
     """'smtp' when SMTP is configured, otherwise 'console'. EMAIL_PROVIDER overrides."""
@@ -56,6 +60,9 @@ async def send_email(to: str, subject: str, text: str) -> SendResult:
     """Send one plain-text email. Never raises: failures come back as SendResult(ok=False)."""
     message = _message(to, subject, text)
     provider = email_provider()
+    if to.rsplit("@", 1)[-1].strip().lower() in SAMPLE_DOMAINS:
+        log.info("Email (not sent, sample address) to %s: %s\n%s", to, subject, text)
+        return SendResult(ok=True, provider_id=message["Message-ID"])
     if provider == "console":
         log.info("Email (not sent, EMAIL_PROVIDER=console) to %s: %s\n%s", to, subject, text)
         return SendResult(ok=True, provider_id=message["Message-ID"])

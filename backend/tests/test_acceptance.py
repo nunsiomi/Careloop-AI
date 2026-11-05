@@ -247,13 +247,13 @@ def test_a_refused_email_is_logged_and_shown_to_the_care_team(client, mailbox, m
     async def refused(to, subject, text):
         return SendResult(ok=False, error="The mailbox does not exist.")
 
+    staff_sign_in(client, mailbox)
     monkeypatch.setattr(notifications, "send_email", refused)
     message = outbox.queue_message(store().get("patients", "p-tola"), channel="email", template="medicine", scheduled_for="2020-01-01T00:00:00.000Z")
     asyncio.run(outbox.send_due())
 
     assert message["status"] == "failed" and message["failure_reason"] == "Not delivered. The mailbox does not exist."
     assert store().first("events", event_type="notification_failed", patient_id="p-tola")
-    staff_sign_in(client, mailbox)
     problems = client.get("/api/notifications", params={"status": "problem"}).json()["notifications"]
     assert message["id"] in {item["id"] for item in problems}
     assert client.get("/api/patients/p-tola").json()["patient"]["failed_messages"] >= 1

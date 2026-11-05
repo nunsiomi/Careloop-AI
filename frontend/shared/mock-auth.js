@@ -134,7 +134,7 @@ function newChallenge(fields) {
   auth.challenges[challenge.id] = challenge;
   return challenge;
 }
-// Codes go by email (no SMS provider yet; SMS_AVAILABLE in languages.js) or by a call from Tomi. On phone sign-in
+// Codes go by email, text message (when SMS_AVAILABLE in languages.js) or a phone call. On phone sign-in
 // the email address is never shown, so the screen cannot reveal whether a number has an account.
 function demoMessage(challenge) {
   const code = challenge.code;
