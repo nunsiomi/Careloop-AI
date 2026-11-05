@@ -31,6 +31,9 @@ ABBREVIATIONS = {"od": "once daily", "bd": "twice daily", "bid": "twice daily", 
                  "qds": "four times daily", "qid": "four times daily", "nocte": "at night", "mane": "in the morning", "prn": "as needed",
                  "tab": "tablet", "tabs": "tablets", "cap": "capsule", "caps": "capsules"}
 FREQUENCY_COUNTS = {"once": 1, "twice": 2, "three times": 3, "four times": 4}
+# Lines that book a visit or a test, so one the plan leaves out is caught without the model (from Mary's PR #3).
+VISIT_LINE = re.compile(r"\b(appointments?|follow[- ]?up|review|clinic visit|see (?:the |your )?(?:doctor|nurse))\b", re.I)
+TEST_LINE = re.compile(r"\b(tests?|scans?|x-?rays?|ultrasound|ecg|echo(?:cardiogram)?|blood count|fbc|urinalysis|lab(?:oratory)? work)\b", re.I)
 UNCLEAR_USE = re.compile(r"\b(as directed|as needed|when required|prn|as before|as usual)\b", re.I)
 VAGUE_DATE = re.compile(r"\b(next week|next month|soon|later|in a few days|as soon as possible)\b", re.I)
 RELATIVE_DATE = re.compile(r"\b(in|within)\s+(\d+|" + "|".join(NUMBER_WORDS) + r")\s+(days?|weeks?)\b", re.I)
@@ -295,6 +298,17 @@ def check(note: str, plan: PlanDraft, patient_name: str = "") -> list[Finding]:
             findings.append(_issue(f"{field}.time", f"The time {appointment.time} is not in the note", "high", line, invented=True))
         elif not appointment.time:
             findings.append(_issue(f"{field}.time", "The visit time is missing from the note", "medium", line))
+
+    # Visits and tests in the note that the plan leaves out (medicine lines are checked above)
+    covered = {_best_line(care_lines, f"{item.what} {item.where}") for item in plan.appointments}
+    covered |= {_best_line(care_lines, f"{item.name} {item.where}") for item in plan.tests}
+    for line in care_lines:
+        if line in covered or MEDICINE_LINE.search(line):
+            continue
+        if TEST_LINE.search(line):
+            findings.append(_issue("tests", "A test in the note is not in the plan", "high", line))
+        elif VISIT_LINE.search(line):
+            findings.append(_issue("appointments", "A visit in the note is not in the plan", "high", line))
 
     for index, test in enumerate(plan.tests):
         field = f"tests[{index}]"

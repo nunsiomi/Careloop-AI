@@ -137,3 +137,18 @@ async def test_rule_checks_stand_when_the_model_fails(monkeypatch):
     assert result["model_checked"] is False
     assert result["deliverable"] is False
     assert len(result["issues"]) == len(EXPECTED["ibrahim-danjuma.txt"]["issues"])
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("name, dropped", [("tola-adeyemi.txt", "appointments"), ("zainab-musa.txt", "appointments"), ("zainab-musa.txt", "tests"),
+                                           ("chidi-okeke.txt", "tests")])
+async def test_a_visit_or_test_left_out_of_the_plan_blocks_delivery(name, dropped):
+    # Mary's check from PR #3: caught by the rules, so it holds even when the model is not used.
+    plan = copy.deepcopy(EXPECTED[name]["plan"])
+    plan[dropped] = []
+
+    result = await verify(note(name), plan)
+
+    left_out = [issue for issue in result["issues"] if issue["field"] == dropped]
+    assert left_out and left_out[0]["severity"] == "high" and left_out[0]["source_text"] in note(name)
+    assert result["deliverable"] is False
