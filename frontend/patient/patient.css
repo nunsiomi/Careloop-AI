@@ -300,6 +300,11 @@
 .bubble-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-2); }
 .bubble-actions.is-stacked { display: grid; }
 .bubble-actions.is-stacked .btn { justify-content: flex-start; white-space: normal; text-align: left; }
+.bubble-text { white-space: pre-line; }
+/* Questions to tap under Tomi's welcome. They are in the patient's language, so Noto Sans, not the display face. */
+.suggestions { display: grid; gap: var(--space-2); margin-top: var(--space-2); }
+.suggestion { justify-content: flex-start; min-height: var(--tap-min); border: 1px solid var(--purple-200); background: var(--purple-100); color: var(--purple-700); font-family: var(--font-body); font-weight: 600; white-space: normal; text-align: left; }
+.suggestion:hover:not(:disabled) { background: var(--purple-200); }
 .option-card { display: grid; gap: var(--space-3); margin-top: var(--space-2); padding: var(--space-3); border-radius: var(--radius-md); background: var(--paper-100); }
 .option-item { display: grid; justify-items: start; gap: var(--space-1); }
 .option-name { font-weight: 700; }

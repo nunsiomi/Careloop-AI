@@ -1,11 +1,11 @@
 // In-browser stand-in for the auth endpoints in docs/api_shapes.md ("Sign-in and accounts").
 // Every account, code, password and invite here is invented and exists only in this browser.
 // The real backend keeps sessions in httpOnly cookies; this mock keeps them in local storage.
-import { maskPhone, normalizePhone } from './format.js';
-import { mockDb, mockPersist, setMockFacility } from './mock-server.js';
+import { maskEmail, maskPhone, normalizePhone } from './format.js';
+import { mockDb, mockPersist, setMockFacility, setSessionReader } from './mock-server.js';
 
 // Bump the version whenever the seeded accounts change, so browsers drop their old saved copy.
-const AUTH_KEY = 'careloop-auth-v6';
+const AUTH_KEY = 'careloop-auth-v7';
 const SESSION_KEY = { patient: 'careloop-session-patient', staff: 'careloop-session-staff' };
 const DEMO_PIN = '1234';
 const CODE_TTL = 300; // seconds a sign-in code stays valid
@@ -93,7 +93,6 @@ const inSeconds = (seconds) => new Date(Date.now() + seconds * 1000).toISOString
 const sixDigits = () => String(Math.floor(100000 + Math.random() * 900000));
 const db = () => mockDb();
 
-const maskEmail = (email) => email.replace(/^(.)(.*)(@.*)$/, (_, first, middle, domain) => `${first}${'•'.repeat(Math.min(middle.length, 6))}${domain}`);
 
 function readSession(kind) {
   try {
@@ -102,6 +101,8 @@ function readSession(kind) {
   } catch { /* ignore */ }
   return null;
 }
+setSessionReader(readSession);  // so Tomi's welcome in the mock can greet whoever is signed in
+
 function writeSession(kind, session) {
   if (session) window.localStorage.setItem(SESSION_KEY[kind], JSON.stringify(session));
   else window.localStorage.removeItem(SESSION_KEY[kind]);
@@ -109,11 +110,12 @@ function writeSession(kind, session) {
 
 /* ---------- patients and caregivers ---------- */
 
-function patientByPhone(e164) { return db().patients.find((patient) => patient.phone_e164 === e164); }
-function caregiverByPhone(e164) { return auth.caregivers.find((caregiver) => caregiver.phone_e164 === e164); }
+// Patients and caregivers sign in by email (decided by Nunsi, 5 Nov 2026); one account per address.
+const sameEmail = (a, b) => Boolean(a) && Boolean(b) && a.trim().toLowerCase() === b.trim().toLowerCase();
+const pinKey = ({ kind, patient, caregiver }) => (kind === 'caregiver' ? `caregiver:${caregiver.id}` : `patient:${patient.id}`);
 
 function patientSession({ kind, patient, caregiver }) {
-  const pinSet = kind === 'caregiver' ? Boolean(auth.patient_pins[caregiver.phone_e164]) || caregiver.phone_e164 === '+2348000000201' : Boolean(patient.pin_set);
+  const pinSet = kind === 'caregiver' ? Boolean(auth.patient_pins[pinKey({ kind, patient, caregiver })]) || caregiver.id === 'cg-1' : Boolean(patient.pin_set);
   return {
     id: token('ps'),
     kind,
@@ -121,7 +123,8 @@ function patientSession({ kind, patient, caregiver }) {
     user_name: kind === 'caregiver' ? caregiver.name : patient.name,
     acting_for_name: kind === 'caregiver' ? patient.name : null,
     relation: kind === 'caregiver' ? caregiver.relation : null,
-    phone_e164: kind === 'caregiver' ? caregiver.phone_e164 : patient.phone_e164,
+    caregiver_id: kind === 'caregiver' ? caregiver.id : null,
+    email: (kind === 'caregiver' ? caregiver.email : patient.email) || null,
     pin_set: pinSet,
     consent_needed: kind === 'patient' && !patient.consent_at,
     idle_lock_minutes: 10,
@@ -129,18 +132,18 @@ function patientSession({ kind, patient, caregiver }) {
   };
 }
 
+// The PIN-failure key for a session (it carries kind, patient_id and caregiver_id rather than the records).
+const sessionPinKey = (session) => (session.kind === 'caregiver' ? `caregiver:${session.caregiver_id}` : `patient:${session.patient_id}`);
+
 function newChallenge(fields) {
   const challenge = { id: token('ch'), code: sixDigits(), tries: 0, expires_at: inSeconds(CODE_TTL), resend_at: inSeconds(RESEND_AFTER), ...fields };
   auth.challenges[challenge.id] = challenge;
   return challenge;
 }
-// Codes go by email, text message (when SMS_AVAILABLE in languages.js) or a phone call. On phone sign-in
-// the email address is never shown, so the screen cannot reveal whether a number has an account.
+// Codes go by email only. The screen shows back the address the person typed, whether or not it has an account.
 function demoMessage(challenge) {
   const code = challenge.code;
-  if (challenge.via === 'voice') return { channel: 'voice', from: 'Tomi, calling from CareLoop', text: `Hello, this is Tomi from CareLoop. Your sign-in code is ${code.split('').join(' ')}. Again: ${code.split('').join(' ')}.` };
-  if (challenge.via === 'sms') return { channel: 'sms', from: 'CareLoop', text: `${code} is your CareLoop sign-in code. It works for 5 minutes. Never share it, not even with your care team.` };
-  if (!challenge.email) return null; // unknown number or no email on file: nothing is sent
+  if (!challenge.holder && challenge.purpose !== 'invite') return null; // no account with this address: nothing is sent
   return { channel: 'email', from: `${EMAIL_FROM} <codes@careloop.app>`, text: `${greeting(challenge.name)}
 
 Here is your code to sign in to CareLoop:
@@ -152,15 +155,14 @@ It works for 5 minutes. Never share it, not even with your care team. If you did
 The CareLoop team` };
 }
 const challengeView = (challenge) => ({
-  challenge_id: challenge.id, masked_phone: maskPhone(challenge.phone_e164), via: challenge.via,
-  masked_email: challenge.show_email && challenge.email ? maskEmail(challenge.email) : null,
+  challenge_id: challenge.id, via: 'email', masked_email: maskEmail(challenge.email),
   expires_in: CODE_TTL, resend_in: RESEND_AFTER, demo_code: challenge.code, demo_message: demoMessage(challenge)
 });
 
-function pinHolder(e164) {
-  const patient = patientByPhone(e164);
+function holderByEmail(email) {
+  const patient = db().patients.find((item) => sameEmail(item.email, email));
   if (patient) return { kind: 'patient', patient };
-  const caregiver = caregiverByPhone(e164);
+  const caregiver = auth.caregivers.find((item) => sameEmail(item.email, email));
   if (caregiver) return { kind: 'caregiver', caregiver, patient: db().patients.find((item) => item.id === caregiver.patient_id) };
   return null;
 }
@@ -169,37 +171,32 @@ export const authMock = {
   /* Patient app */
   async getPatientSession() { return ok({ session: readSession('patient') }, 40); },
 
-  async startPhoneSignIn({ phone, via = 'email' }) {
-    const e164 = normalizePhone(phone);
-    if (!e164) return fail('Enter a mobile number. Check the country, then type the number, for example 0803 123 4567.');
-    const holder = pinHolder(e164);
-    const email = holder ? (holder.kind === 'caregiver' ? holder.caregiver.email : holder.patient.email) || null : null;
-    // Same answer whether or not the number is known, so the form cannot be used to look people up.
-    const challenge = newChallenge({ phone_e164: e164, via, email, show_email: false, purpose: 'sign_in', name: holder ? (holder.caregiver || holder.patient).name : null, holder: holder ? { kind: holder.kind, patient_id: holder.patient.id, caregiver_id: holder.caregiver?.id } : null });
+  async startEmailSignIn({ email }) {
+    const address = String(email || '').trim();
+    if (!EMAIL_PATTERN.test(address)) return fail('Enter your email address, for example name@example.com.');
+    const holder = holderByEmail(address);
+    // Same answer whether or not the address is known, so the form cannot be used to look people up.
+    const challenge = newChallenge({ email: address, via: 'email', purpose: 'sign_in', name: holder ? (holder.caregiver || holder.patient).name : null, holder: holder ? { kind: holder.kind, patient_id: holder.patient.id, caregiver_id: holder.caregiver?.id } : null });
     return ok(challengeView(challenge));
   },
 
-  async startInviteSignIn(code, { via = 'email', phone, email } = {}) {
+  async startInviteSignIn(code, { email } = {}) {
     const invite = auth.invites[code?.toUpperCase()];
     if (!invite || invite.status !== 'pending') return fail('This invite code is not valid or has been used. Ask your care team for a new one.', 404);
-    let e164;
-    if (invite.kind === 'patient') e164 = db().patients.find((patient) => patient.id === invite.patient_id).phone_e164;
-    else {
-      e164 = normalizePhone(phone);
-      if (!e164) return fail('Enter your own Nigerian mobile number, for example 0803 123 4567.');
-    }
     const address = String(email || '').trim();
-    if (via === 'email' && !EMAIL_PATTERN.test(address)) return fail('Enter your email address, for example name@example.com.');
-    // The person typed this address themselves, so it is safe to show it back to them.
-    const challenge = newChallenge({ phone_e164: e164, via, email: via === 'email' ? address : null, show_email: true, purpose: 'invite', invite_code: invite.code });
+    if (!EMAIL_PATTERN.test(address)) return fail('Enter your email address, for example name@example.com.');
+    const holder = holderByEmail(address);
+    if (holder && !(invite.kind === 'patient' && holder.kind === 'patient' && holder.patient.id === invite.patient_id)) return fail('This email address is already used for another CareLoop account. Use a different one.', 409);
+    const name = invite.kind === 'caregiver' ? invite.name : db().patients.find((patient) => patient.id === invite.patient_id).name;
+    const challenge = newChallenge({ email: address, via: 'email', purpose: 'invite', invite_code: invite.code, name });
     return ok(challengeView(challenge));
   },
 
-  async resendCode(challengeId, { via } = {}) {
+  async resendCode(challengeId) {
     const challenge = auth.challenges[challengeId];
     if (!challenge) return fail('This code has expired. Start again.', 410);
     if (challenge.resend_at > new Date().toISOString()) return fail('Wait a moment before asking for another code.', 429);
-    Object.assign(challenge, { code: sixDigits(), tries: 0, via: via || challenge.via, expires_at: inSeconds(CODE_TTL), resend_at: inSeconds(RESEND_AFTER) });
+    Object.assign(challenge, { code: sixDigits(), tries: 0, expires_at: inSeconds(CODE_TTL), resend_at: inSeconds(RESEND_AFTER) });
     return ok(challengeView(challenge));
   },
 
@@ -220,37 +217,38 @@ export const authMock = {
       const patient = db().patients.find((item) => item.id === invite.patient_id);
       invite.status = 'accepted';
       if (invite.kind === 'caregiver') {
-        const caregiver = { id: token('cg'), patient_id: patient.id, name: invite.name, relation: invite.relation, phone_e164: challenge.phone_e164, email: challenge.email || invite.email || null, scope: 'See the plan, tasks and visits. Report on their behalf.', added_at: new Date().toISOString() };
+        const caregiver = { id: token('cg'), patient_id: patient.id, name: invite.name, relation: invite.relation, phone_e164: invite.phone_e164 || null, email: challenge.email, scope: 'See the plan, tasks and visits. Report on their behalf.', added_at: new Date().toISOString() };
         auth.caregivers.push(caregiver);
         session = patientSession({ kind: 'caregiver', patient, caregiver });
       } else {
         patient.activation_status = patient.consent_at ? patient.activation_status : 'invited';
-        if (challenge.email) patient.email = challenge.email;
+        patient.email = challenge.email;
         session = patientSession({ kind: 'patient', patient });
       }
     } else {
-      if (!challenge.holder) return fail('This number is not linked to a CareLoop account. Use the invite link your care team sent, or ask them to add you.', 404);
+      if (!challenge.holder) return fail('This email address is not linked to a CareLoop account. Use the invite your care team sent, or ask them to add you.', 404);
       const patient = db().patients.find((item) => item.id === challenge.holder.patient_id);
       const caregiver = auth.caregivers.find((item) => item.id === challenge.holder.caregiver_id);
       session = patientSession({ kind: challenge.holder.kind, patient, caregiver });
     }
-    delete auth.pin_failures[session.phone_e164];
+    delete auth.pin_failures[sessionPinKey(session)];
     writeSession('patient', session);
     return ok({ session });
   },
 
-  async signInWithPin({ phone_e164, pin }) {
-    const holder = pinHolder(phone_e164);
+  async signInWithPin({ email, pin }) {
+    const holder = holderByEmail(email);
     if (!holder) return fail('This phone is not set up. Sign in with a code instead.', 404);
-    const failures = auth.pin_failures[phone_e164] || 0;
+    const key = pinKey(holder);
+    const failures = auth.pin_failures[key] || 0;
     if (failures >= MAX_TRIES) return fail('Too many wrong PINs. Sign in with a code to set a new PIN.', 429, { locked: true });
-    const expected = auth.patient_pins[phone_e164] || DEMO_PIN;
+    const expected = auth.patient_pins[key] || DEMO_PIN;
     if (pin !== expected) {
-      auth.pin_failures[phone_e164] = failures + 1;
+      auth.pin_failures[key] = failures + 1;
       const left = MAX_TRIES - failures - 1;
       return fail(left > 0 ? `That PIN is not right. ${left} ${left === 1 ? 'try' : 'tries'} left.` : 'Too many wrong PINs. Sign in with a code to set a new PIN.', 401, { locked: left <= 0 });
     }
-    delete auth.pin_failures[phone_e164];
+    delete auth.pin_failures[key];
     const session = patientSession(holder);
     writeSession('patient', session);
     return ok({ session });
@@ -260,9 +258,8 @@ export const authMock = {
     const session = readSession('patient');
     if (!session) return fail('Your session has ended. Sign in again.', 401);
     if (!/^\d{4}$/.test(pin)) return fail('Your PIN must be 4 numbers.');
-    auth.patient_pins[session.phone_e164] = pin;
+    auth.patient_pins[sessionPinKey(session)] = pin;
     if (session.kind === 'patient') {
-      // One PIN for the app and for Tomi's phone calls.
       const patient = db().patients.find((item) => item.id === session.patient_id);
       patient.pin_set = true;
       patient.pin_mock = pin;
@@ -275,9 +272,9 @@ export const authMock = {
   async getInvite(code) {
     const invite = auth.invites[code?.toUpperCase()];
     if (!invite) return fail('We could not find that invite code. Check the letters and numbers, or ask your care team.', 404);
-    if (invite.status !== 'pending') return fail('This invite has already been used. Sign in with your phone number instead.', 410);
+    if (invite.status !== 'pending') return fail('This invite has already been used. Sign in with your email address instead.', 410);
     const patient = db().patients.find((item) => item.id === invite.patient_id);
-    return ok({ invite: { code: invite.code, kind: invite.kind, facility: invite.facility, invited_by: invite.invited_by, patient_first_name: patient.name.split(' ')[0], caregiver_name: invite.name || null, relation: invite.relation || null, masked_phone: invite.kind === 'patient' ? maskPhone(patient.phone_e164) : null } });
+    return ok({ invite: { code: invite.code, kind: invite.kind, facility: invite.facility, invited_by: invite.invited_by, patient_first_name: patient.name.split(' ')[0], caregiver_name: invite.name || null, relation: invite.relation || null, masked_email: invite.kind === 'patient' && patient.email ? maskEmail(patient.email) : null } });
   },
 
   async refreshPatientSession() {
@@ -293,8 +290,8 @@ export const authMock = {
 
   async listCaregivers(patientId) {
     return ok({
-      caregivers: auth.caregivers.filter((item) => item.patient_id === patientId).map(({ phone_e164, ...rest }) => ({ ...rest, masked_phone: maskPhone(phone_e164) })),
-      invites: Object.values(auth.invites).filter((item) => item.patient_id === patientId && item.kind === 'caregiver' && item.status === 'pending')
+      caregivers: auth.caregivers.filter((item) => item.patient_id === patientId).map(({ phone_e164, ...rest }) => ({ ...rest, masked_phone: phone_e164 ? maskPhone(phone_e164) : null })),
+      invites: Object.values(auth.invites).filter((item) => item.patient_id === patientId && item.kind === 'caregiver' && item.status === 'pending').map(({ phone_e164, ...rest }) => rest)
     });
   },
   async inviteCaregiver(patientId, { name, relation, phone, email }) {
@@ -303,7 +300,7 @@ export const authMock = {
     if (!EMAIL_PATTERN.test(String(email || '').trim())) return fail('Enter their email address, so we can send them the invite.');
     const code = `CG-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
     const patient = db().patients.find((item) => item.id === patientId);
-    auth.invites[code] = { code, kind: 'caregiver', patient_id: patientId, name: name.trim(), relation: relation || 'Family', facility: db().facility || FACILITY, invited_by: patient.name, status: 'pending', masked_phone: maskPhone(normalizePhone(phone)), email: String(email).trim() };
+    auth.invites[code] = { code, kind: 'caregiver', patient_id: patientId, name: name.trim(), relation: relation || 'Family', facility: db().facility || FACILITY, invited_by: patient.name, status: 'pending', phone_e164: normalizePhone(phone), masked_phone: maskPhone(normalizePhone(phone)), email: String(email).trim() };
     return ok({ invite: auth.invites[code] });
   },
   async removeCaregiver(patientId, caregiverId) {

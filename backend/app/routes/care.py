@@ -6,7 +6,7 @@ from app.db import store
 from app.routes.deps import patient_for, record_for, require_any, require_patient, require_staff, scoped
 from app.security import hash_secret
 from app.agents import language
-from app.services import care, chat, escalations, outbox, plans
+from app.services import care, chat, escalations, outbox, plans, welcome
 from app.services.activity_log import log_event
 from app.util import EMAIL_PATTERN, ApiError, make_id, normalize_phone, now_iso
 
@@ -179,7 +179,11 @@ async def approve_plan(plan_id: str, request: Request, body: dict = Body(default
 
 @router.get("/patients/{patient_id}/messages")
 def get_messages(patient_id: str, request: Request):
-    return {"messages": scoped("messages", require_any(request), patient_id)}
+    actor = require_any(request)
+    result = {"messages": scoped("messages", actor, patient_id)}
+    if actor.kind != "staff":
+        result["welcome"] = welcome.for_patient(patient_for(actor, patient_id), actor.name)
+    return result
 
 
 async def translate(patient: dict, english: str) -> dict:

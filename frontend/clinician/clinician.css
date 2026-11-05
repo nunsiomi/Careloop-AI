@@ -453,8 +453,9 @@ code { padding: 1px var(--space-1); border-radius: var(--radius-sm); background:
 .assistant-head p { margin-top: var(--space-1); color: var(--ink-600); font-size: var(--text-sm); }
 .assistant-patient .select { width: 100%; }
 .assistant-log { flex: 1 1 auto; display: grid; align-content: start; gap: var(--space-5); min-height: 0; overflow-y: auto; padding: var(--space-1); margin: 0 calc(var(--space-1) * -1); }
-.assistant-empty { display: grid; gap: var(--space-3); color: var(--ink-700); }
-.assistant-empty ul { display: grid; gap: var(--space-2); list-style: none; }
+.assistant-empty { display: grid; gap: var(--space-2); margin-top: var(--space-2); list-style: none; }
+.assistant-head h2 { display: flex; align-items: center; gap: var(--space-2); }
+.tomi-mark { width: 12px; height: 12px; border-radius: var(--radius-round); background: var(--marigold-400); box-shadow: 0 0 0 3px var(--marigold-100); }
 .assistant-starter { width: 100%; min-height: var(--tap-min); padding: var(--space-2) var(--space-3); border: 1.5px dashed var(--line-strong); border-radius: var(--radius-md); background: var(--paper-50); color: var(--ink-900); text-align: left; cursor: pointer; }
 .assistant-starter:hover { border-color: var(--purple-500); border-style: solid; }
 .assistant-turn { display: grid; gap: var(--space-3); }

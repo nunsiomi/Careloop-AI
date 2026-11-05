@@ -118,7 +118,7 @@ def test_a_correction_is_a_new_event_that_points_at_the_old_one(client):
 # ----- Appointment integrity
 
 def test_a_reschedule_stays_pending_until_a_clinician_approves(client, mailbox):
-    patient_sign_in(client, mailbox, "0800 000 0102", "tola.adeyemi@kestrelmail.ng")
+    patient_sign_in(client, mailbox, "tola.adeyemi@kestrelmail.ng")
     before = dict(store().get("appointments", "a-t1"))
 
     client.post("/api/appointments/a-t1/reschedule-requests", json={"reason": "No transport that day"})
@@ -202,7 +202,7 @@ def test_a_failed_message_can_be_sent_again_only_once(client, mailbox):
 # ----- Escalation delivery: not acknowledged until a person acts; backup contact
 
 def test_escalation_is_delivered_then_backed_up_until_someone_acknowledges(client, mailbox):
-    patient_sign_in(client, mailbox, "0800 000 0102", "tola.adeyemi@kestrelmail.ng")
+    patient_sign_in(client, mailbox, "tola.adeyemi@kestrelmail.ng")
     escalation_id = client.post("/api/patients/p-tola/messages", json={"original_text": "I cannot breathe", "language": "English"}).json()["escalation"]["id"]
     escalation = store().get("escalations", escalation_id)
 
@@ -239,7 +239,7 @@ def test_when_phone_calls_are_not_set_up_the_dashboard_says_so_and_chat_still_wo
     assert not store().first("calls", lambda item: item["status"] == "initiated", patient_id="p-tola")
 
     client.post("/api/auth/staff/sign-out", json={})
-    patient_sign_in(client, mailbox, "0800 000 0102", "tola.adeyemi@kestrelmail.ng")
+    patient_sign_in(client, mailbox, "tola.adeyemi@kestrelmail.ng")
     assert client.post("/api/patients/p-tola/messages", json={"original_text": "I took my morning tablet", "language": "English"}).status_code == 200
 
 
@@ -262,7 +262,7 @@ def test_a_refused_email_is_logged_and_shown_to_the_care_team(client, mailbox, m
 # ----- Security
 
 def test_patient_and_caregiver_sessions_cannot_reach_care_team_routes(client, mailbox):
-    patient_sign_in(client, mailbox, "0800 000 0102", "tola.adeyemi@kestrelmail.ng")
+    patient_sign_in(client, mailbox, "tola.adeyemi@kestrelmail.ng")
     for method, path in [("get", "/api/escalations"), ("get", "/api/events"), ("get", "/api/admin/facility"), ("get", "/api/staff"),
                          ("post", "/api/assistant/drafts"), ("post", "/api/notifications"), ("post", "/api/escalations/e-1/acknowledge")]:
         assert getattr(client, method)(path).status_code in (401, 403), path

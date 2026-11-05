@@ -18,13 +18,18 @@ export default function ChatScreen({ patient, refreshKey, headingRef, onTalk }) 
   const [sending, setSending] = useState(false);
   const [error, setError] = useState(null);
   const [escalation, setEscalation] = useState(null);
+  const [asked, setAsked] = useState(false);
   const logRef = useRef(null);
   const inputRef = useRef(null);
+  // Tomi's welcome sits after the conversation so far, so it is the first thing seen on opening the chat.
+  const welcome = query.data?.welcome;
+  const welcomeAt = query.data?.messages.length ?? 0;
 
   useEffect(() => { if (query.data) setMessages(query.data.messages); }, [query.data]);
   useEffect(() => { logRef.current?.lastElementChild?.scrollIntoView({ block: 'end', behavior: 'smooth' }); }, [messages.length, sending]);
 
   const send = async (payload, { focusLog = false } = {}) => {
+    setAsked(true);
     setSending(true);
     setError(null);
     const optimistic = { id: `local-${Date.now()}`, direction: 'patient', original_text: payload.original_text, created_at: new Date().toISOString() };
@@ -69,8 +74,27 @@ export default function ChatScreen({ patient, refreshKey, headingRef, onTalk }) 
       <ErrorNote error={query.error} onRetry={query.reload} />
 
       <div ref={logRef} className="chat-log" role="log" aria-label="Conversation with Tomi" tabIndex={0}>
-        {query.data && !messages.length && <p className="soft-note">Ask Tomi about your plan, or tell Tomi how things are going.</p>}
-        {messages.map((message) => (
+        {query.data && !messages.length && !welcome && <p className="soft-note">Ask Tomi about your plan, or tell Tomi how things are going.</p>}
+        {messages.slice(0, welcomeAt).map((message) => (
+          <ChatMessage key={message.id} message={message} disabled={sending} onQuick={(payload) => send(payload, { focusLog: true })} />
+        ))}
+        {welcome && (
+          <div className="bubble-row is-tomi">
+            <span className="tomi-dot" aria-hidden="true" />
+            <div className="bubble">
+              <span className="sr-only">Tomi said: </span>
+              <p className="bubble-text">{welcome.text}</p>
+              {!asked && welcome.suggestions.length > 0 && (
+                <div className="suggestions" role="group" aria-label="Questions you can tap">
+                  {welcome.suggestions.map((suggestion) => (
+                    <button key={suggestion} type="button" className="btn suggestion" disabled={sending} onClick={() => send({ original_text: suggestion }, { focusLog: true })}>{suggestion}</button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+        {messages.slice(welcomeAt).map((message) => (
           <ChatMessage key={message.id} message={message} disabled={sending} onQuick={(payload) => send(payload, { focusLog: true })} />
         ))}
         {sending && <div className="typing" role="status" aria-label="Tomi is writing"><span /><span /><span /></div>}
@@ -97,7 +121,7 @@ function ChatMessage({ message, disabled, onQuick }) {
       {!mine && <span className="tomi-dot" aria-hidden="true" />}
       <div className="bubble">
         <span className="sr-only">{mine ? 'You said' : 'Tomi said'}: </span>
-        <p>{message.original_text}</p>
+        <p className="bubble-text">{message.original_text}</p>
         {!mine && message.number_check_passed === false && <p className="bubble-note">Shown in English so the numbers stay exact.</p>}
         <p className="bubble-time">{formatTime(message.created_at)}</p>
 

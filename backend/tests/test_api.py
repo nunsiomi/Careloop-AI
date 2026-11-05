@@ -26,8 +26,8 @@ def staff_sign_in(client: TestClient, mailbox, email=ADA["email"], password=ADA[
     return verified.json()["session"]
 
 
-def patient_sign_in(client: TestClient, mailbox, phone: str, email: str) -> dict:
-    challenge = client.post("/api/auth/patient/otp", json={"phone": phone, "via": "email"}).json()
+def patient_sign_in(client: TestClient, mailbox, email: str) -> dict:
+    challenge = client.post("/api/auth/patient/otp", json={"email": email}).json()
     verified = client.post(f"/api/auth/patient/otp/{challenge['challenge_id']}/verify", json={"code": mailbox.last_code(email)})
     assert verified.status_code == 200, verified.text
     return verified.json()["session"]
@@ -79,13 +79,13 @@ def test_staff_password_reset_link_sets_a_new_password_once(client, mailbox):
 
 
 def test_patient_forgot_pin_emails_a_code_then_sets_a_new_pin(client, mailbox):
-    phone, email = "0800 000 0102", "tola.adeyemi@kestrelmail.ng"
-    patient_sign_in(client, mailbox, phone, email)
+    email = "tola.adeyemi@kestrelmail.ng"
+    patient_sign_in(client, mailbox, email)
     assert mailbox.sent[-1]["to"] == email
     assert client.post("/api/auth/patient/pin", json={"pin": "4071"}).status_code == 200
 
-    assert client.post("/api/auth/patient/pin-sign-in", json={"phone_e164": "+2348000000102", "pin": "1234"}).status_code == 401
-    assert client.post("/api/auth/patient/pin-sign-in", json={"phone_e164": "+2348000000102", "pin": "4071"}).status_code == 200
+    assert client.post("/api/auth/patient/pin-sign-in", json={"email": email, "pin": "1234"}).status_code == 401
+    assert client.post("/api/auth/patient/pin-sign-in", json={"email": "Tola.Adeyemi@kestrelmail.ng", "pin": "4071"}).status_code == 200
 
 
 def test_staff_from_another_facility_see_none_of_kestrels_patients(client, mailbox):
@@ -109,7 +109,7 @@ def test_staff_from_another_facility_see_none_of_kestrels_patients(client, mailb
 # ----- patients
 
 def test_patient_signs_in_with_an_email_code_and_sees_only_their_record(client, mailbox):
-    session = patient_sign_in(client, mailbox, "0800 000 0101", "zainab.musa@kestrelmail.ng")
+    session = patient_sign_in(client, mailbox, "zainab.musa@kestrelmail.ng")
 
     assert (session["kind"], session["patient_id"], session["pin_set"]) == ("patient", "p-zainab", True)
     assert client.get("/api/patients/p-zainab").status_code == 200
@@ -117,77 +117,42 @@ def test_patient_signs_in_with_an_email_code_and_sees_only_their_record(client, 
     assert client.get("/api/patients").status_code == 401  # the dashboard list is staff only
 
 
-def test_unknown_number_gets_the_same_answer_and_no_email(client, mailbox):
-    known = client.post("/api/auth/patient/otp", json={"phone": "0800 000 0101"}).json()
+def test_unknown_email_gets_the_same_answer_and_no_email(client, mailbox):
+    known = client.post("/api/auth/patient/otp", json={"email": "zainab.musa@kestrelmail.ng"}).json()
     sent_before = len(mailbox.sent)
-    unknown = client.post("/api/auth/patient/otp", json={"phone": "0800 000 0999"}).json()
+    unknown = client.post("/api/auth/patient/otp", json={"email": "nobody@example.com"}).json()
 
-    assert set(known) == set(unknown) and known["masked_email"] is None and unknown["masked_email"] is None
+    assert set(known) == set(unknown) and unknown["masked_email"].endswith("@example.com")
     assert len(mailbox.sent) == sent_before
     assert client.post(f"/api/auth/patient/otp/{unknown['challenge_id']}/verify", json={"code": "123456"}).status_code == 401
+    assert client.post("/api/auth/patient/otp", json={"email": "not an email"}).status_code == 400
 
 
-def test_codes_by_phone_are_not_offered_yet(client):
-    response = client.post("/api/auth/patient/otp", json={"phone": "0800 000 0101", "via": "sms"})
-    assert response.status_code == 503
-    assert client.post("/api/auth/patient/otp", json={"phone": "0800 000 0101", "via": "voice"}).status_code == 503  # no Termii key
-
-
-def test_code_by_text_goes_only_to_known_numbers(client, monkeypatch):
-    from app.adapters import SendResult
-    from app.services import identity
-    texts = []
-
-    async def fake_text(to_e164, code):
-        texts.append((to_e164, code))
-        return SendResult(ok=True, provider_id="t-2")
-
-    monkeypatch.setattr(identity, "sms_available", lambda: True)
-    monkeypatch.setattr(identity, "send_sign_in_code_sms", fake_text)
-
-    known = client.post("/api/auth/patient/otp", json={"phone": "0800 000 0101", "via": "sms"}).json()
-    unknown = client.post("/api/auth/patient/otp", json={"phone": "0800 000 0999", "via": "sms"}).json()
-
-    assert set(known) == set(unknown) and known["via"] == unknown["via"] == "sms"
-    assert [to for to, _ in texts] == ["+2348000000101"]
-    verified = client.post(f"/api/auth/patient/otp/{known['challenge_id']}/verify", json={"code": texts[0][1]})
-    assert verified.status_code == 200 and verified.json()["session"]["patient_id"] == "p-zainab"
-
-
-def test_code_by_phone_call_rings_only_known_numbers(client, monkeypatch):
-    from app.adapters import SendResult
-    from app.services import identity
-    calls = []
-
-    async def fake_call(to_e164, code):
-        calls.append((to_e164, code))
-        return SendResult(ok=True, provider_id="t-1")
-
-    monkeypatch.setenv("VOICE_CODE_PROVIDER", "termii")
-    monkeypatch.setattr(identity, "call_code", fake_call)
-
-    known = client.post("/api/auth/patient/otp", json={"phone": "0800 000 0101", "via": "voice"}).json()
-    unknown = client.post("/api/auth/patient/otp", json={"phone": "0800 000 0999", "via": "voice"}).json()
-
-    assert set(known) == set(unknown) and known["via"] == unknown["via"] == "voice"
-    assert [to for to, _ in calls] == ["+2348000000101"]
-    verified = client.post(f"/api/auth/patient/otp/{known['challenge_id']}/verify", json={"code": calls[0][1]})
-    assert verified.status_code == 200 and verified.json()["session"]["patient_id"] == "p-zainab"
+def test_a_family_helper_signs_in_with_their_own_email(client, mailbox):
+    session = patient_sign_in(client, mailbox, "hadiza.musa@kestrelmail.ng")
+    assert (session["kind"], session["patient_id"], session["user_name"]) == ("caregiver", "p-zainab", "Hadiza Musa")
+    assert session["email"] == "hadiza.musa@kestrelmail.ng" and "phone_e164" not in session
 
 
 def test_five_wrong_pins_lock_pin_sign_in(client):
     for _ in range(4):
-        assert client.post("/api/auth/patient/pin-sign-in", json={"phone_e164": "+2348000000102", "pin": "9999"}).status_code == 401
-    locked = client.post("/api/auth/patient/pin-sign-in", json={"phone_e164": "+2348000000102", "pin": "9999"})
+        assert client.post("/api/auth/patient/pin-sign-in", json={"email": "tola.adeyemi@kestrelmail.ng", "pin": "9999"}).status_code == 401
+    locked = client.post("/api/auth/patient/pin-sign-in", json={"email": "tola.adeyemi@kestrelmail.ng", "pin": "9999"})
     assert locked.status_code == 401 and locked.json()["locked"] is True
-    assert client.post("/api/auth/patient/pin-sign-in", json={"phone_e164": "+2348000000102", "pin": "1234"}).status_code == 429
+    assert client.post("/api/auth/patient/pin-sign-in", json={"email": "tola.adeyemi@kestrelmail.ng", "pin": "1234"}).status_code == 429
+    assert client.post("/api/auth/patient/pin-sign-in", json={"email": "nobody@example.com", "pin": "1234"}).status_code == 404
+
+
+def test_an_invite_cannot_take_an_email_address_already_in_use(client, mailbox):
+    taken = client.post("/api/auth/invites/CL-7K4Q/otp", json={"email": "zainab.musa@kestrelmail.ng"})
+    assert taken.status_code == 409 and mailbox.sent == []
 
 
 def test_invite_collects_email_then_consent_starts_email_reminders(client, mailbox):
     invite = client.get("/api/auth/invites/CL-7K4Q").json()["invite"]
-    assert invite["patient_first_name"] == "Chidi" and invite["masked_phone"].endswith("0103")
+    assert invite["patient_first_name"] == "Chidi" and "masked_phone" not in invite
 
-    challenge = client.post("/api/auth/invites/CL-7K4Q/otp", json={"via": "email", "email": "chidi.okeke@example.com"}).json()
+    challenge = client.post("/api/auth/invites/CL-7K4Q/otp", json={"email": "chidi.okeke@example.com"}).json()
     assert challenge["masked_email"].endswith("@example.com")
     session = client.post(f"/api/auth/patient/otp/{challenge['challenge_id']}/verify", json={"code": mailbox.last_code("chidi.okeke@example.com")}).json()["session"]
     assert session["consent_needed"] is True
@@ -202,7 +167,7 @@ def test_invite_collects_email_then_consent_starts_email_reminders(client, mailb
 
 
 def test_red_flag_in_chat_opens_an_escalation_for_the_care_team(client, mailbox):
-    patient_sign_in(client, mailbox, "0800 000 0102", "tola.adeyemi@kestrelmail.ng")
+    patient_sign_in(client, mailbox, "tola.adeyemi@kestrelmail.ng")
     sent = client.post("/api/patients/p-tola/messages", json={"original_text": "My chest hurts and I cannot breathe", "language": "Yoruba"}).json()
 
     assert sent["escalation"]["call_number"] == "112"
@@ -318,7 +283,7 @@ def test_assistant_drafts_then_applies_only_after_confirming(client, mailbox):
 
 
 def test_scripted_browser_voice_when_livekit_is_not_set_up(client, mailbox):
-    patient_sign_in(client, mailbox, "0800 000 0102", "tola.adeyemi@kestrelmail.ng")
+    patient_sign_in(client, mailbox, "tola.adeyemi@kestrelmail.ng")
     session = client.post("/api/voice/sessions", json={"patient_id": "p-tola"}).json()["session"]
     assert session["mode"] == "mock"
 
@@ -370,3 +335,16 @@ def test_join_codes_show_only_for_sample_facilities_when_switched_on(client, mon
 
     assert shown["kestrel"] == "KGH-4821" and shown["real-clinic"] is None
     assert all("join_code" not in item for item in client.get("/api/facilities").json()["facilities"])
+
+
+def test_a_helper_joins_by_email_and_keeps_the_phone_the_patient_gave(client, mailbox):
+    patient_sign_in(client, mailbox, "tola.adeyemi@kestrelmail.ng")
+    invite = client.post("/api/patients/p-tola/caregivers", json={"name": "Femi Adeyemi", "relation": "Son", "phone": "0800 000 0301",
+                                                                  "email": "femi.adeyemi@example.com"}).json()["invite"]
+    assert "phone_e164" not in invite
+    client.post("/api/auth/patient/sign-out")
+
+    challenge = client.post(f"/api/auth/invites/{invite['code']}/otp", json={"email": "femi.adeyemi@example.com"}).json()
+    session = client.post(f"/api/auth/patient/otp/{challenge['challenge_id']}/verify", json={"code": mailbox.last_code("femi.adeyemi@example.com")}).json()["session"]
+    assert (session["kind"], session["patient_id"], session["email"]) == ("caregiver", "p-tola", "femi.adeyemi@example.com")
+    assert store().first("caregivers", name="Femi Adeyemi")["phone_e164"] == "+2348000000301"  # Tomi knows them when they call

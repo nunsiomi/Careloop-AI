@@ -1,5 +1,5 @@
 {
-  "_about": "Tomi's fixed call lines. None of them carry clinical content; everything about a patient's plan comes from the backend after the PIN check. English is approved wording from the app. Hausa, Yoruba and Igbo are first drafts: a native speaker must check each one and set checked to true (launch checklist, section 5). The emergency line must also be approved by the clinical mentor.",
+  "_about": "Tomi's fixed lines, for calls and the welcome in the app's chat. None of them carry clinical content; everything about a patient's plan comes from the backend once the caller is recognised. English is approved wording from the app. Hausa, Yoruba and Igbo are first drafts: a native speaker must check each one and set checked to true (launch checklist, section 5). The emergency line must also be approved by the clinical mentor.",
   "en": {
     "checked": true,
     "greeting": "Hello, this is Tomi, an automated assistant from CareLoop.",
@@ -14,7 +14,13 @@
     "goodbye": "Thank you. Goodbye.",
     "unavailable": "Sorry, Tomi cannot help right now. Please contact your care team. Goodbye.",
     "not_clear": "Sorry, I did not catch that. Please say it again.",
-    "handover": "I am having trouble hearing you. I will ask your care team to contact you. If you feel very unwell, go to the nearest hospital now."
+    "handover": "I am having trouble hearing you. I will ask your care team to contact you. If you feel very unwell, go to the nearest hospital now.",
+    "chat_hello": "Hello {first_name}, I am Tomi, your CareLoop assistant.",
+    "chat_can_do": "I can tell you what is on the plan today, when the next visit is, and what a medicine on the plan is for. Anything else, I pass to the care team.",
+    "chat_ask": "What would you like to ask?",
+    "ask_today": "What is on the plan today?",
+    "ask_visit": "When is the next visit?",
+    "ask_medicine": "What is {medicine} for?"
   },
   "ha": {
     "checked": false,
@@ -30,7 +36,13 @@
     "goodbye": "Na gode. Sai an jima.",
     "unavailable": "Yi haƙuri, Tomi ba za ta iya taimakawa yanzu ba. Don Allah ku tuntuɓi ma'aikatan lafiyarku. Sai an jima.",
     "not_clear": "Yi haƙuri, ban ji abin da kuka faɗa ba. Don Allah ku sake faɗa.",
-    "handover": "Ina samun wahalar jin ku. Zan roƙi ma'aikatan lafiyarku su tuntuɓe ku. Idan kuna jin rashin lafiya sosai, ku je asibiti mafi kusa yanzu."
+    "handover": "Ina samun wahalar jin ku. Zan roƙi ma'aikatan lafiyarku su tuntuɓe ku. Idan kuna jin rashin lafiya sosai, ku je asibiti mafi kusa yanzu.",
+    "chat_hello": "Sannu {first_name}, ni ce Tomi, mataimakiyarku ta CareLoop.",
+    "chat_can_do": "Zan iya faɗa muku abin da ke cikin tsarin yau, lokacin ziyara ta gaba, da abin da magani a cikin tsarin yake yi. Duk wani abu kuma, zan miƙa wa ma'aikatan lafiya.",
+    "chat_ask": "Me kuke so ku tambaya?",
+    "ask_today": "Me ke cikin tsarin yau?",
+    "ask_visit": "Yaushe ne ziyara ta gaba?",
+    "ask_medicine": "Menene {medicine} yake yi?"
   },
   "yo": {
     "checked": false,
@@ -46,7 +58,13 @@
     "goodbye": "Ẹ ṣé. Ó dàbọ̀.",
     "unavailable": "Ẹ má bínú, Tomi kò lè ràn yín lọ́wọ́ báyìí. Ẹ jọ̀wọ́ ẹ kàn sí àwọn olùtọ́jú yín. Ó dàbọ̀.",
     "not_clear": "Ẹ má bínú, mi ò gbọ́ ohun tí ẹ sọ. Ẹ jọ̀wọ́ ẹ tún un sọ.",
-    "handover": "Ó ṣòro fún mi láti gbọ́ yín. Màá sọ fún àwọn olùtọ́jú yín pé kí wọ́n kàn sí yín. Tí ara yín kò bá yá rárá, ẹ lọ sí ilé ìwòsàn tó sún mọ́ yín jù lọ báyìí."
+    "handover": "Ó ṣòro fún mi láti gbọ́ yín. Màá sọ fún àwọn olùtọ́jú yín pé kí wọ́n kàn sí yín. Tí ara yín kò bá yá rárá, ẹ lọ sí ilé ìwòsàn tó sún mọ́ yín jù lọ báyìí.",
+    "chat_hello": "Ẹ n lẹ́ {first_name}, Tomi ni mí, olùrànlọ́wọ́ yín láti CareLoop.",
+    "chat_can_do": "Mo lè sọ ohun tó wà nínú ètò yín lónìí, ìgbà tí ìbẹ̀wò tó kàn máa jẹ́, àti ohun tí oògùn kan nínú ètò náà wà fún. Màá fi ohunkóhun mìíràn ránṣẹ́ sí àwọn olùtọ́jú yín.",
+    "chat_ask": "Kí ni ẹ fẹ́ béèrè?",
+    "ask_today": "Kí ló wà nínú ètò mi lónìí?",
+    "ask_visit": "Ìgbà wo ni ìbẹ̀wò tó kàn?",
+    "ask_medicine": "Kí ni {medicine} wà fún?"
   },
   "ig": {
     "checked": false,
@@ -62,6 +80,12 @@
     "goodbye": "Daalụ. Ka ọ dị.",
     "unavailable": "Ndo, Tomi enweghị ike inyere gị aka ugbu a. Biko kpọtụrụ ndị na-elekọta gị. Ka ọ dị.",
     "not_clear": "Ndo, anụghị m ihe i kwuru. Biko kwughachi ya.",
-    "handover": "Ọ na-esiri m ike ịnụ olu gị. Aga m agwa ndị na-elekọta gị ka ha kpọtụrụ gị. Ọ bụrụ na ahụ adịghị gị mma nke ukwuu, gaa n'ụlọ ọgwụ kacha nso ugbu a."
+    "handover": "Ọ na-esiri m ike ịnụ olu gị. Aga m agwa ndị na-elekọta gị ka ha kpọtụrụ gị. Ọ bụrụ na ahụ adịghị gị mma nke ukwuu, gaa n'ụlọ ọgwụ kacha nso ugbu a.",
+    "chat_hello": "Ndewo {first_name}, abụ m Tomi, onye enyemaka gị na CareLoop.",
+    "chat_can_do": "Enwere m ike ịgwa gị ihe dị na atụmatụ taa, mgbe nleta ọzọ ga-abụ, na ihe ọgwụ dị na atụmatụ ahụ na-arụ. Ihe ọ bụla ọzọ, m ga-eziga ya ndị na-elekọta gị.",
+    "chat_ask": "Gịnị ka ị chọrọ ịjụ?",
+    "ask_today": "Gịnị dị na atụmatụ m taa?",
+    "ask_visit": "Olee mgbe nleta ọzọ ga-abụ?",
+    "ask_medicine": "Gịnị ka {medicine} na-arụ?"
   }
 }

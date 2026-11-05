@@ -11,7 +11,7 @@ from tests.test_api import patient_sign_in
 
 
 def tola(client, mailbox):
-    patient_sign_in(client, mailbox, "0800 000 0102", "tola.adeyemi@kestrelmail.ng")
+    patient_sign_in(client, mailbox, "tola.adeyemi@kestrelmail.ng")
 
 
 def say(client, text, **extra):

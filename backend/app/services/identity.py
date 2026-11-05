@@ -8,13 +8,11 @@ import os
 import secrets
 
 from app.adapters.email import send_email
-from app.adapters.sms import sms_available
-from app.adapters.termii import call_code, voice_codes_available
 from app.agents import language as language_agent
 from app.db import store
 from app.security import check_code, check_secret, hash_code, hash_secret, new_session_token, password_problem, rate_limit, session_key
 from app.services.activity_log import log_event
-from app.services.notifications import greeting, send_code_email, send_sign_in_code, send_sign_in_code_sms
+from app.services.notifications import greeting, send_code_email, send_sign_in_code
 from app.util import (EMAIL_PATTERN, ApiError, first_name, in_seconds, make_id, mask_email, mask_phone, normalize_phone,
                       now_iso, six_digits, token)
 
@@ -47,6 +45,25 @@ def _holder(e164: str) -> dict | None:
     return None
 
 
+def _holder_by_email(email: str | None) -> dict | None:
+    """The patient or caregiver account with this email address (patients sign in by email, decided by Nunsi, 5 Nov 2026)."""
+    address = str(email or "").strip().lower()
+    if not address:
+        return None
+    patient = store().first("patients", lambda item: (item.get("email") or "").lower() == address)
+    if patient:
+        return {"kind": "patient", "patient_id": patient["id"], "caregiver_id": None}
+    caregiver = store().first("caregivers", lambda item: (item.get("email") or "").lower() == address)
+    if caregiver:
+        return {"kind": "caregiver", "patient_id": caregiver["patient_id"], "caregiver_id": caregiver["id"]}
+    return None
+
+
+def _pin_key(holder: dict) -> str:
+    """Wrong-PIN counter for one account (a session or a holder: both carry kind, patient_id and caregiver_id)."""
+    return f"pin:{holder['kind']}:{holder.get('caregiver_id') or holder['patient_id']}"
+
+
 def _holder_record(holder: dict | None) -> dict:
     if not holder:
         return {}
@@ -54,83 +71,64 @@ def _holder_record(holder: dict | None) -> dict:
     return record or {}
 
 
-def _holder_email(holder: dict | None) -> str | None:
-    return _holder_record(holder).get("email")
-
-
 def _challenge_view(challenge: dict) -> dict:
-    return {"challenge_id": challenge["id"], "masked_phone": mask_phone(challenge["phone_e164"]), "via": challenge["via"],
-            "masked_email": mask_email(challenge["email"]) if challenge.get("show_email") and challenge.get("email") else None,
+    # The person typed this address, so showing it back (masked) says nothing about whether it has an account.
+    return {"challenge_id": challenge["id"], "via": "email", "masked_email": mask_email(challenge["email"]),
             "expires_in": CODE_TTL, "resend_in": RESEND_AFTER}
 
 
-def _check_via(via: str) -> str:
-    if (via == "sms" and not sms_available()) or (via == "voice" and not voice_codes_available()):
-        raise ApiError("Codes by phone call or text message are not available yet. Choose email.", 503)
-    if via not in ("email", "voice", "sms"):
-        raise ApiError("Choose how to get your code.")
-    return via
+def _email_address(email: str | None) -> str:
+    address = str(email or "").strip()
+    if not EMAIL_PATTERN.match(address):
+        raise ApiError("Enter your email address, for example name@example.com.")
+    rate_limit(f"otp-email:{address.lower()}", 5, 600, "Too many codes for this email address. Wait 10 minutes, then try again.")
+    return address
 
 
 async def _send_challenge_code(challenge: dict) -> None:
     code = six_digits()
     challenge.update(code_hash=hash_code(code), tries=0, expires_at=in_seconds(CODE_TTL), resend_at=in_seconds(RESEND_AFTER))
-    if challenge["via"] in ("voice", "sms"):
-        # Only call or text numbers we know: an account holder, or the phone on an invite. Unknown numbers get the same answer.
-        if challenge.get("holder") or challenge["purpose"] == "invite":
-            by_call = challenge["via"] == "voice"
-            result = await (call_code if by_call else send_sign_in_code_sms)(challenge["phone_e164"], code)
-            if not result.ok and challenge["purpose"] == "invite":
-                raise ApiError(f"We could not {'call' if by_call else 'text'} you just now. Try again in a minute, or choose email.", 502)
-        return
-    if challenge.get("email"):  # unknown number or no email on file: nothing is sent, same answer
-        result = await send_sign_in_code(challenge["email"], code, _holder_record(challenge.get("holder")).get("name"))
-        if not result.ok and challenge.get("show_email"):
-            raise ApiError("We could not send the email just now. Try again in a minute.", 502)
+    if not challenge.get("holder") and challenge["purpose"] != "invite":
+        return  # an address with no account: nothing is sent, and the screen says the same as for a known one
+    result = await send_sign_in_code(challenge["email"], code, _holder_record(challenge.get("holder")).get("name") or challenge.get("name"))
+    if not result.ok and challenge["purpose"] == "invite":  # a failed send to a known address stays silent, like an unknown one
+        raise ApiError("We could not send the email just now. Try again in a minute.", 502)
 
 
-async def start_phone_sign_in(phone: str, via: str = "email", client: str = "") -> dict:
-    e164 = normalize_phone(phone)
-    if not e164:
-        raise ApiError("Enter a mobile number. Check the country, then type the number, for example 0803 123 4567.")
+async def start_email_sign_in(email: str | None, client: str = "") -> dict:
+    """Sign-in and forgotten PIN: a 6-digit code to the email address on the account."""
     rate_limit(f"otp:{client}", 10, 600)
-    rate_limit(f"otp-phone:{e164}", 5, 600, "Too many codes for this number. Wait 10 minutes, then try again.")
-    holder = _holder(e164)
-    challenge = store().add("challenges", {"id": token("ch"), "phone_e164": e164, "via": _check_via(via), "email": _holder_email(holder),
-                                           "show_email": False, "purpose": "sign_in", "holder": holder, "invite_code": None})
+    address = _email_address(email)
+    challenge = store().add("challenges", {"id": token("ch"), "email": address, "via": "email", "purpose": "sign_in",
+                                           "holder": _holder_by_email(address), "invite_code": None})
     await _send_challenge_code(challenge)
     return _challenge_view(challenge)
 
 
-async def start_invite_sign_in(code: str, via: str = "email", phone: str | None = None, email: str | None = None, client: str = "") -> dict:
+async def start_invite_sign_in(code: str, email: str | None = None, client: str = "") -> dict:
     invite = store().get("invites", (code or "").upper())
     if not invite or invite["status"] != "pending":
         raise ApiError("This invite code is not valid or has been used. Ask your care team for a new one.", 404)
     rate_limit(f"otp:{client}", 10, 600)
-    if invite["kind"] == "patient":
-        e164 = store().get("patients", invite["patient_id"])["phone_e164"]
-    else:
-        e164 = normalize_phone(phone)
-        if not e164:
-            raise ApiError("Enter your own mobile number, for example 0803 123 4567.")
-    rate_limit(f"otp-phone:{e164}", 5, 600, "Too many codes for this number. Wait 10 minutes, then try again.")
-    address = str(email or "").strip()
-    if _check_via(via) == "email" and not EMAIL_PATTERN.match(address):
-        raise ApiError("Enter your email address, for example name@example.com.")
-    challenge = store().add("challenges", {"id": token("ch"), "phone_e164": e164, "via": via, "email": address, "show_email": True,
-                                           "purpose": "invite", "holder": None, "invite_code": invite["code"]})
+    address = _email_address(email)
+    holder = _holder_by_email(address)
+    # One account per email address, because the address is how people sign in. A patient's own address on file is fine.
+    if holder and not (invite["kind"] == "patient" and holder["kind"] == "patient" and holder["patient_id"] == invite["patient_id"]):
+        raise ApiError("This email address is already used for another CareLoop account. Use a different one.", 409)
+    name = invite.get("name") if invite["kind"] == "caregiver" else store().get("patients", invite["patient_id"])["name"]
+    challenge = store().add("challenges", {"id": token("ch"), "email": address, "via": "email", "purpose": "invite", "holder": None,
+                                           "invite_code": invite["code"], "name": name})
     await _send_challenge_code(challenge)
     return _challenge_view(challenge)
 
 
-async def resend_code(challenge_id: str, via: str | None = None) -> dict:
+async def resend_code(challenge_id: str) -> dict:
     challenge = store().get("challenges", challenge_id)
     if not challenge:
         raise ApiError("This code has expired. Start again.", 410)
     if challenge["resend_at"] > now_iso():
         raise ApiError("Wait a moment before asking for another code.", 429)
-    rate_limit(f"otp-phone:{challenge['phone_e164']}", 5, 600, "Too many codes for this number. Wait 10 minutes, then try again.")
-    challenge["via"] = _check_via(via or challenge["via"])
+    _email_address(challenge["email"])
     await _send_challenge_code(challenge)
     return _challenge_view(challenge)
 
@@ -139,7 +137,7 @@ def _patient_session_view(session: dict) -> dict:
     patient = store().get("patients", session["patient_id"]) or {}
     return {
         "id": session["public_id"], "kind": session["kind"], "patient_id": session["patient_id"], "user_name": session["user_name"],
-        "acting_for_name": session["acting_for_name"], "relation": session["relation"], "phone_e164": session["phone_e164"],
+        "acting_for_name": session["acting_for_name"], "relation": session["relation"], "email": _pin_record(session).get("email"),
         "pin_set": bool(_pin_record(session).get("pin_hash")),
         "consent_needed": session["kind"] == "patient" and not patient.get("consent_at"),
         "idle_lock_minutes": 10, "expires_at": session["expires_at"],
@@ -157,10 +155,9 @@ def _new_patient_session(kind: str, patient: dict, caregiver: dict | None = None
     session = store().add("patient_sessions", {
         "id": key, "public_id": token("ps"), "kind": kind, "patient_id": patient["id"], "caregiver_id": caregiver["id"] if caregiver else None,
         "user_name": caregiver["name"] if caregiver else patient["name"], "acting_for_name": patient["name"] if caregiver else None,
-        "relation": caregiver.get("relation") if caregiver else None, "phone_e164": caregiver["phone_e164"] if caregiver else patient["phone_e164"],
-        "expires_at": in_seconds(30 * 86400), "created_at": now_iso(),
+        "relation": caregiver.get("relation") if caregiver else None, "expires_at": in_seconds(30 * 86400), "created_at": now_iso(),
     })
-    store().counter(f"pin:{session['phone_e164']}").update(count=0, locked_until=None)
+    store().counter(_pin_key(session)).update(count=0, locked_until=None)
     return session, raw
 
 
@@ -185,7 +182,7 @@ def verify_code(challenge_id: str, code: str) -> tuple[dict, str]:
         if invite["kind"] == "caregiver":
             caregiver = store().add("caregivers", {
                 "id": make_id("cg"), "patient_id": patient["id"], "name": invite["name"], "relation": invite.get("relation") or "Family",
-                "phone_e164": challenge["phone_e164"], "email": challenge.get("email") or invite.get("email"),
+                "phone_e164": invite.get("phone_e164"), "email": challenge["email"],
                 "scope": "See the plan, tasks and visits. Report on their behalf.", "added_at": now_iso(), "pin_hash": None})
             log_event(patient["id"], actor_type="caregiver", actor_id=caregiver["name"], source_channel="web", event_type="caregiver_joined",
                       summary=f"{caregiver['name']} ({caregiver['relation']}) joined to help.", verification_status="self_reported")
@@ -193,26 +190,26 @@ def verify_code(challenge_id: str, code: str) -> tuple[dict, str]:
         else:
             if not patient.get("consent_at"):
                 patient["activation_status"] = "invited"
-            if challenge.get("email"):
-                patient["email"] = challenge["email"]
+            patient["email"] = challenge["email"]
             session, raw = _new_patient_session("patient", patient)
     else:
         holder = challenge.get("holder")
         if not holder:
-            raise ApiError("This number is not linked to a CareLoop account. Use the invite your care team sent, or ask them to add you.", 404)
+            raise ApiError("This email address is not linked to a CareLoop account. Use the invite your care team sent, or ask them to add you.", 404)
         patient = store().get("patients", holder["patient_id"])
         caregiver = store().get("caregivers", holder["caregiver_id"]) if holder["kind"] == "caregiver" else None
         session, raw = _new_patient_session(holder["kind"], patient, caregiver)
     return _patient_session_view(session), raw
 
 
-def sign_in_with_pin(phone_e164: str, pin: str, client: str = "") -> tuple[dict, str]:
+def sign_in_with_pin(email: str, pin: str, client: str = "") -> tuple[dict, str]:
+    """PIN on a remembered phone. The phone remembers the account's email address, not a phone number."""
     rate_limit(f"pin:{client}", 20, 600)
-    holder = _holder(phone_e164 or "")
+    holder = _holder_by_email(email)
     if not holder:
         raise ApiError("This phone is not set up. Sign in with a code instead.", 404)
-    record = store().get("caregivers", holder["caregiver_id"]) if holder["kind"] == "caregiver" else store().get("patients", holder["patient_id"])
-    guard = store().counter(f"pin:{phone_e164}")
+    record = _holder_record(holder)
+    guard = store().counter(_pin_key(holder))
     if guard["count"] >= MAX_TRIES:
         raise ApiError("Too many wrong PINs. Sign in with a code to set a new PIN.", 429, locked=True)
     if not check_secret(pin, record.get("pin_hash")):
@@ -232,8 +229,8 @@ def set_pin(session: dict, pin: str) -> dict:
     record = _pin_record(session)
     record["pin_hash"] = hash_secret(pin)
     if session["kind"] == "patient":
-        record["pin_set"] = True  # one PIN for the app and for Tomi's phone calls
-    store().counter(f"pin:{session['phone_e164']}").update(count=0, locked_until=None)
+        record["pin_set"] = True
+    store().counter(_pin_key(session)).update(count=0, locked_until=None)
     return _patient_session_view(session)
 
 
@@ -259,17 +256,18 @@ def get_invite(code: str) -> dict:
     if not invite:
         raise ApiError("We could not find that invite code. Check the letters and numbers, or ask your care team.", 404)
     if invite["status"] != "pending":
-        raise ApiError("This invite has already been used. Sign in with your phone number instead.", 410)
+        raise ApiError("This invite has already been used. Sign in with your email address instead.", 410)
     patient = store().get("patients", invite["patient_id"])
     return {"code": invite["code"], "kind": invite["kind"], "facility": invite["facility"], "invited_by": invite["invited_by"],
             "patient_first_name": first_name(patient["name"]), "caregiver_name": invite.get("name"), "relation": invite.get("relation"),
-            "masked_phone": mask_phone(patient["phone_e164"]) if invite["kind"] == "patient" else None}
+            "masked_email": mask_email(patient["email"]) if invite["kind"] == "patient" and patient.get("email") else None}
 
 
 def list_caregivers(patient_id: str) -> dict:
-    caregivers = [{key: value for key, value in item.items() if key not in ("phone_e164", "pin_hash")} | {"masked_phone": mask_phone(item["phone_e164"])}
+    caregivers = [{key: value for key, value in item.items() if key not in ("phone_e164", "pin_hash")}
+                  | {"masked_phone": mask_phone(item["phone_e164"]) if item.get("phone_e164") else None}
                   for item in store().where("caregivers", patient_id=patient_id)]
-    invites = [{key: value for key, value in item.items() if key != "id"}
+    invites = [{key: value for key, value in item.items() if key not in ("id", "phone_e164")}
                for item in store().where("invites", patient_id=patient_id, kind="caregiver", status="pending")]
     return {"caregivers": caregivers, "invites": invites}
 
@@ -294,14 +292,14 @@ async def invite_caregiver(patient: dict, name: str, relation: str, phone: str, 
     code = _invite_code("CG")
     invite = store().add("invites", {"id": code, "code": code, "kind": "caregiver", "patient_id": patient["id"], "name": name.strip(),
                                      "relation": relation or "Family", "facility": patient.get("facility"), "invited_by": patient["name"],
-                                     "status": "pending", "masked_phone": mask_phone(e164), "email": address, "created_at": now_iso()})
+                                     "status": "pending", "phone_e164": e164, "masked_phone": mask_phone(e164), "email": address, "created_at": now_iso()})
     await send_email(address, f"{first_name(patient['name'])} asked you to help with their care",
                      f"{patient['name']} has asked you to help with their care plan on CareLoop.\n\n"
                      f"Your invite code is {code}. Open {app_url('/patient/#/invite/' + code)} to join. The code works once.\n\n"
                      "If you were not expecting this, you can ignore this email.")
     log_event(patient["id"], actor_type="patient", actor_id=patient["name"], source_channel="web", event_type="caregiver_invited",
               summary=f"Invited {name.strip()} ({relation or 'Family'}) to help.", verification_status="self_reported")
-    return {key: value for key, value in invite.items() if key != "id"}
+    return {key: value for key, value in invite.items() if key not in ("id", "phone_e164")}
 
 
 def remove_caregiver(patient_id: str, caregiver_id: str) -> None:

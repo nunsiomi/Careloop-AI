@@ -42,7 +42,7 @@ const http = {
   /* Sign-in and accounts: patients and caregivers */
   getPatientSession: () => request('/auth/patient/session'),
   refreshPatientSession: () => request('/auth/patient/session'),
-  startPhoneSignIn: (body) => request('/auth/patient/otp', { method: 'POST', body }),
+  startEmailSignIn: (body) => request('/auth/patient/otp', { method: 'POST', body }),
   startInviteSignIn: (code, body) => request(`/auth/invites/${id(code)}/otp`, { method: 'POST', body }),
   resendCode: (challengeId, body) => request(`/auth/patient/otp/${id(challengeId)}/resend`, { method: 'POST', body }),
   verifyCode: ({ challenge_id, code }) => request(`/auth/patient/otp/${id(challenge_id)}/verify`, { method: 'POST', body: { code } }),
@@ -129,6 +129,7 @@ const http = {
   resolveEscalation: (escalationId, body) => request(`/escalations/${id(escalationId)}/resolve`, { method: 'POST', body }),
 
   sendNextReminder: (patientId) => request(`/demo/patients/${id(patientId)}/reminders/next`, { method: 'POST' }),
+  getAssistantWelcome: ({ patient_id } = {}) => request(`/assistant/welcome${query({ patient_id })}`),
   draftAssistantActions: (body) => request('/assistant/drafts', { method: 'POST', body }),
   applyAssistantActions: (body) => request('/assistant/apply', { method: 'POST', body }),
   resetDemo: () => request('/demo/reset', { method: 'POST' })

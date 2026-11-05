@@ -10,7 +10,7 @@ import { PlanScreen, TodayScreen, VisitsScreen } from './screens.jsx';
 import ChatScreen from './Chat.jsx';
 import VoiceSheet from './VoiceSheet.jsx';
 import AccountScreen from './Account.jsx';
-import { InviteScreen, PhoneSignIn, SetPinScreen, UnlockScreen, VerifyScreen, WelcomeScreen } from './Auth.jsx';
+import { EmailSignIn, InviteScreen, SetPinScreen, UnlockScreen, VerifyScreen, WelcomeScreen } from './Auth.jsx';
 import { LogoMark, SafetyFooter } from './parts.jsx';
 import { forgetDevice, rememberDevice, rememberedDevice } from './device.js';
 import LegalScreen from './Legal.jsx';
@@ -90,7 +90,7 @@ export default function PatientApp() {
 
   if (!session) {
     const shared = { go, notice };
-    if (route.name === 'sign-in' || route.name === 'forgot-pin') return <PhoneSignIn {...shared} purpose={route.name === 'forgot-pin' ? 'reset' : 'sign_in'} onChallenge={(next) => { setChallenge(next); go('verify'); }} />;
+    if (route.name === 'sign-in' || route.name === 'forgot-pin') return <EmailSignIn {...shared} purpose={route.name === 'forgot-pin' ? 'reset' : 'sign_in'} onChallenge={(next) => { setChallenge(next); go('verify'); }} />;
     if (route.name === 'verify' && challenge) return <VerifyScreen {...shared} challenge={challenge} onChallenge={setChallenge} onSignedIn={(next) => signedIn(next, { forPinReset: challenge.purpose === 'reset' })} />;
     if (route.name === 'unlock' && rememberedDevice()) return <UnlockScreen {...shared} device={rememberedDevice()} onSignedIn={signedIn} onForget={() => { forgetDevice(); go('welcome', { replace: true }); }} />;
     if (route.name === 'invite') return <InviteScreen {...shared} code={route.params[0]} onChallenge={(next) => { setChallenge(next); go('verify'); }} />;

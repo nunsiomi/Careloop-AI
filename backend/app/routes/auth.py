@@ -20,18 +20,18 @@ def patient_session(request: Request):
 
 
 @router.post("/auth/patient/otp")
-async def start_phone_sign_in(request: Request, body: dict = Body(default={})):
-    return await identity.start_phone_sign_in(body.get("phone"), body.get("via") or "email", client_key(request))
+async def start_email_sign_in(request: Request, body: dict = Body(default={})):
+    return await identity.start_email_sign_in(body.get("email"), client_key(request))
 
 
 @router.post("/auth/invites/{code}/otp")
 async def start_invite_sign_in(code: str, request: Request, body: dict = Body(default={})):
-    return await identity.start_invite_sign_in(code, body.get("via") or "email", body.get("phone"), body.get("email"), client_key(request))
+    return await identity.start_invite_sign_in(code, body.get("email"), client_key(request))
 
 
 @router.post("/auth/patient/otp/{challenge_id}/resend")
-async def resend_code(challenge_id: str, body: dict = Body(default={})):
-    return await identity.resend_code(challenge_id, body.get("via"))
+async def resend_code(challenge_id: str):
+    return await identity.resend_code(challenge_id)
 
 
 @router.post("/auth/patient/otp/{challenge_id}/verify")
@@ -43,7 +43,7 @@ def verify_code(challenge_id: str, response: Response, body: dict = Body(default
 
 @router.post("/auth/patient/pin-sign-in")
 def pin_sign_in(request: Request, response: Response, body: dict = Body(default={})):
-    session, raw = identity.sign_in_with_pin(body.get("phone_e164", ""), str(body.get("pin", "")), client_key(request))
+    session, raw = identity.sign_in_with_pin(body.get("email", ""), str(body.get("pin", "")), client_key(request))
     set_cookie(response, PATIENT_COOKIE, raw, PATIENT_AGE)
     return {"session": session}
 

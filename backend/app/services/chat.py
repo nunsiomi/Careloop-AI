@@ -76,7 +76,7 @@ def _clock_hours(sources: list[str]) -> set[str]:
 
 def guarded(reply: str | None, patient: dict, fallback: str, extra_sources: list[str] | None = None, limit: int = 320) -> str:
     """The model's reply only if it adds no number and gives no advice; otherwise the fixed line."""
-    text = (reply or "").strip()
+    text = re.sub(r"[  ]", " ", reply or "").strip()
     if not text or len(text) > limit or ADVICE.search(text) or safety.check(text).action != "continue":
         return fallback
     sources = _approved_sources(patient) + (extra_sources or [])
@@ -120,6 +120,27 @@ async def _tomi_answer(patient: dict, text: str, actor: str | None) -> str | Non
         return FIXED["passed_on"] if passed_on else None
     fallback = FIXED["passed_on"] if passed_on else FIXED["received"]
     return guarded(reply, patient, fallback, [json.dumps(brief, ensure_ascii=False), *looked_up], limit=600)
+
+
+TODAY_QUESTION = re.compile(r"\b(today|this morning|tonight)\b")
+VISIT_QUESTION = re.compile(r"\b(next|when)\b.*\b(visit|appointment|clinic)\b")
+
+
+def _plan_answer(patient: dict, text: str) -> str | None:
+    """Without a model: today's plan or the next visit, straight from the record. None for anything else."""
+    clean = safety.normalize(text)
+    if care.classify(text)["kind"] in ("reschedule", "barrier", "red_flag"):
+        return None  # "I could not get my medicine today?" is a problem to solve, not a question about the plan
+    brief = briefs.patient_brief(patient)
+    if TODAY_QUESTION.search(clean):
+        if not brief["today"]:
+            return "There is nothing on the plan for today."
+        rows = [f"- {task['what']}, {task['due'][-5:]} ({task['status']})" for task in brief["today"]]
+        return "Today on the plan:\n" + "\n".join(rows)
+    if VISIT_QUESTION.search(clean):
+        visit = brief["upcoming_visits"][0] if brief["upcoming_visits"] else None
+        return f"The next visit: {visit['what']}, {visit['where']}, {visit['when']}." if visit else "There is no visit booked. Your care team can help."
+    return None
 
 
 def _checkin_context(patient: dict) -> tuple[dict, list[dict]]:
@@ -211,8 +232,10 @@ async def handle(patient: dict, payload: dict, actor: str | None = None) -> dict
         return result
 
     # 4. Free text. A question goes straight to Tomi, who answers from the plan (or passes it to the care team).
-    if os.getenv("GROQ_API_KEY") and QUESTION.search(safety.normalize(text)):
-        answer = await _tomi_answer(patient, text, actor)
+    if QUESTION.search(safety.normalize(text)):
+        answer = await _tomi_answer(patient, text, actor) if os.getenv("GROQ_API_KEY") else None
+        if answer in (None, FIXED["received"]):  # no model, or its answer did not pass the guards
+            answer = _plan_answer(patient, text) or answer
         if answer:
             result["reply"] = answer
             return result

@@ -152,7 +152,7 @@ function Dashboard({ session, onSignOut }) {
         </main>
         {assistantOpen
           ? <AssistantPanel onClose={closeAssistant} routePatientId={routePatientId} />
-          : <button ref={launcherRef} type="button" className="assistant-launcher" onClick={() => setAssistantOpen(true)}><Mic aria-hidden="true" size={20} />Assistant</button>}
+          : <button ref={launcherRef} type="button" className="assistant-launcher" onClick={() => setAssistantOpen(true)}><Mic aria-hidden="true" size={20} />Ask Tomi</button>}
       </div>
       {locked && <LockScreen user={{ ...user, idle_minutes: session.idle_lock_minutes }} onUnlock={() => setLocked(false)} onSignOut={() => { setLocked(false); onSignOut(); }} />}
     </DashboardContext.Provider>

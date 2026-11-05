@@ -13,15 +13,6 @@ const KIND = {
   note: { icon: NotebookPen, label: 'Note for the care team' }
 };
 
-const STARTERS = [
-  'Who needs attention today?',
-  'How is Zainab getting on with her medicines?',
-  'Does amlodipine interact with bisoprolol?',
-  'Book Grace a diabetes review next Tuesday at 9:30 in the Diabetes Clinic',
-  'Add a kidney function test for Zainab by Friday',
-  'Note that Tola’s son will bring her to clinic from now on'
-];
-
 // ISO time to the value a datetime-local input expects, in local time.
 const toLocalInput = (iso) => {
   if (!iso) return '';
@@ -73,6 +64,7 @@ export function AssistantPanel({ onClose, routePatientId }) {
   const [turns, setTurns] = useState([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
+  const [welcome, setWelcome] = useState(null);
   const inputRef = useRef(null);
   const logRef = useRef(null);
   const baseText = useRef('');
@@ -80,6 +72,14 @@ export function AssistantPanel({ onClose, routePatientId }) {
 
   useEffect(() => { CareLoopAPI.listPatients().then((response) => setPatients(response.patients)).catch(() => {}); }, []);
   useEffect(() => { if (routePatientId) setPatientId(routePatientId); }, [routePatientId]);
+  // Tomi's greeting and questions to tap, from the API: about the selected patient, or the whole facility.
+  const started = turns.length > 0;
+  useEffect(() => {
+    if (started) return undefined;
+    let current = true;
+    CareLoopAPI.getAssistantWelcome({ patient_id: patientId || undefined }).then((response) => { if (current) setWelcome(response.welcome); }).catch(() => {});
+    return () => { current = false; };
+  }, [patientId, started]);
   useEffect(() => { inputRef.current?.focus(); }, []);
   useEffect(() => { logRef.current?.scrollTo({ top: logRef.current.scrollHeight, behavior: 'smooth' }); }, [turns, busy]);
   useEffect(() => {
@@ -148,10 +148,10 @@ export function AssistantPanel({ onClose, routePatientId }) {
     <aside className="assistant" aria-labelledby="assistant-title">
       <header className="assistant-head">
         <div>
-          <h2 id="assistant-title">Assistant</h2>
-          <p>Ask about your patients, or say what you want done. Nothing is saved until you confirm.</p>
+          <h2 id="assistant-title"><span className="tomi-mark" aria-hidden="true" />Tomi</h2>
+          <p>Your CareLoop assistant. Nothing is saved until you confirm.</p>
         </div>
-        <button type="button" className="btn btn-quiet btn-icon" onClick={onClose} aria-label="Close the assistant"><X aria-hidden="true" size={20} /></button>
+        <button type="button" className="btn btn-quiet btn-icon" onClick={onClose} aria-label="Close Tomi"><X aria-hidden="true" size={20} /></button>
       </header>
 
       <div className="field assistant-patient">
@@ -162,20 +162,21 @@ export function AssistantPanel({ onClose, routePatientId }) {
         </select>
       </div>
 
-      <div className="assistant-log" ref={logRef} role="log" aria-live="polite" aria-label="Assistant conversation">
-        {!turns.length && (
-          <div className="assistant-empty">
-            <p>You could say:</p>
-            <ul>
-              {STARTERS.map((starter) => <li key={starter}><button type="button" className="assistant-starter" onClick={() => { setText(starter); inputRef.current?.focus(); }}>{starter}</button></li>)}
-            </ul>
-            <p className="hint">It can answer questions about your patients, look up a medicine, and explain a report you paste in. It can also add medicine and test reminders, book visits, send an email reminder, ask Tomi to call, or write a note on the timeline.</p>
+      <div className="assistant-log" ref={logRef} role="log" aria-live="polite" aria-label="Conversation with Tomi">
+        {welcome && (
+          <div className="assistant-turn">
+            <div className="assistant-reply"><span className="sr-only">Tomi: </span><AnswerText text={welcome.text} /></div>
+            {!started && welcome.suggestions.length > 0 && (
+              <ul className="assistant-empty" aria-label="Questions you can tap">
+                {welcome.suggestions.map((suggestion) => <li key={suggestion}><button type="button" className="assistant-starter" onClick={() => draft(suggestion)}>{suggestion}</button></li>)}
+              </ul>
+            )}
           </div>
         )}
         {turns.map((turn) => (
           <div key={turn.id} className="assistant-turn">
             <p className="assistant-said"><span className="sr-only">You: </span>{turn.instruction}</p>
-            {turn.status === 'drafting' && <p className="assistant-reply is-thinking">Thinking…</p>}
+            {turn.status === 'drafting' && <p className="assistant-reply is-thinking">Tomi is thinking…</p>}
             {turn.status === 'failed' && <p className="assistant-reply"><AlertCircle aria-hidden="true" size={16} />{turn.message}</p>}
             {turn.draft && <DraftCard turn={turn} onChoosePatient={choosePatient} onEdit={editAction} onRemove={removeAction} onConfirm={confirm} onDiscard={() => updateTurn(turn.id, { status: 'discarded' })} />}
           </div>
@@ -204,7 +205,7 @@ export function AssistantPanel({ onClose, routePatientId }) {
               {dictation.listening ? <MicOff aria-hidden="true" size={20} /> : <Mic aria-hidden="true" size={20} />}
             </button>
           )}
-          <button type="submit" className="btn btn-primary btn-icon" disabled={busy || !text.trim()} aria-label="Send to the assistant"><SendHorizontal aria-hidden="true" size={20} /></button>
+          <button type="submit" className="btn btn-primary btn-icon" disabled={busy || !text.trim()} aria-label="Send to Tomi"><SendHorizontal aria-hidden="true" size={20} /></button>
         </div>
         {error && <p className="field-error" role="alert">{error}</p>}
       </form>

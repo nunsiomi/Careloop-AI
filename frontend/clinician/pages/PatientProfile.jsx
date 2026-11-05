@@ -67,7 +67,7 @@ export default function PatientProfile() {
   return (
     <div className="page">
       <PageHeader title={patient.name} back={back} sub={patient.age ? `${patient.age} years` : null}>
-        <button type="button" className="btn btn-secondary" onClick={openAssistant}><Mic aria-hidden="true" size={18} />Ask the assistant</button>
+        <button type="button" className="btn btn-secondary" onClick={openAssistant}><Mic aria-hidden="true" size={18} />Ask Tomi</button>
         {plan?.status === 'needs_review' && <Link className="btn btn-secondary" to={`/patients/${patient.id}/review`}><ClipboardCheck aria-hidden="true" size={18} />Review plan</Link>}
         {patient.channels?.some((channel) => ['sms', 'email'].includes(channel)) && <button type="button" className="btn btn-secondary" onClick={() => setTexting(true)}><MessageSquareText aria-hidden="true" size={18} />Send a message</button>}
         <button type="button" className="btn btn-call" onClick={() => setCalling(true)} disabled={!patient.channels?.includes('voice')} aria-describedby={!patient.channels?.includes('voice') ? 'no-voice' : undefined}>

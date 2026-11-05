@@ -167,31 +167,32 @@ Error rules: sign-in and reset responses must not reveal whether an account exis
 
 ### Patients and family helpers
 
-- Codes are 6 digits, valid 300 s, resend after 60 s, 5 wrong tries per code. Delivery `via` is `email` (the default), `sms` (Termii text message) or `voice` (a phone call reads the code out; Termii Voice Call). `sms` and `voice` answer 503 until Termii is configured, and only numbers on an account or an invite are texted or called.
-- Phone sign-in sends the code to the email address on the account and never shows that address (`masked_email` is null), so the screen cannot reveal whether a number has an account. With no email on file nothing is sent; the person can choose a call instead.
-- Invites ask for the person's own `email`; it is saved to the patient or caregiver once the code is verified, and `masked_email` echoes it back.
-- The PIN is 4 digits, any 4 digits (simple PINs are allowed). It opens the app on a remembered phone; phone calls have no PIN. 5 wrong PINs locks PIN sign-in until a code is used.
+- Patients and helpers sign in with their **email address**, not a phone number (decided by Nunsi, 5 Nov 2026). Codes are 6 digits, sent by email only, valid 300 s, resend after 60 s, 5 wrong tries per code.
+- `masked_email` always echoes the address the person typed. An address with no account gets the same answer and nothing is sent, so the screen cannot reveal whether it has an account. Matching is case-insensitive.
+- Invites ask for the person's own `email`; it is saved to the patient or caregiver once the code is verified, and becomes how they sign in. One account per address: an address already used by another account gets 409 (the person holds a valid invite code, so this tells a stranger nothing). A patient's own address on file is fine.
+- A helper's phone number comes from the patient's "add a helper" form and is saved on their account when they join, so Tomi knows them when they call. The patient's phone is set by the care team. Phones are for calls, never for sign-in.
+- The PIN is 4 digits, any 4 digits (simple PINs are allowed). It opens the app on a remembered phone, which remembers the account's email address; phone calls have no PIN. 5 wrong PINs locks PIN sign-in until a code is used.
 - The app locks after `idle_lock_minutes` (10) without activity.
-- Phone numbers can be from any country. The app sends `phone` as `+<country code> <number as typed>` (for example `+234 0803 123 4567` or `+44 7400 123456`); a number typed without `+` is read as Nigerian. The backend normalises to E.164 and drops a leading trunk `0` after the country code.
+- Phone numbers (the care team's patient form, a helper's number) can be from any country. The app sends `phone` as `+<country code> <number as typed>` (for example `+234 0803 123 4567` or `+44 7400 123456`); a number typed without `+` is read as Nigerian. The backend normalises to E.164 and drops a leading trunk `0` after the country code.
 
 ```json
 PatientSession: { "id": "ps_...", "kind": "patient | caregiver", "patient_id": "p-zainab", "user_name": "Hadiza Musa",
-  "acting_for_name": "Zainab Musa or null", "relation": "Daughter or null", "phone_e164": "+234...", "pin_set": true,
+  "acting_for_name": "Zainab Musa or null", "relation": "Daughter or null", "email": "hadiza.musa@example.com", "pin_set": true,
   "consent_needed": false, "idle_lock_minutes": 10, "expires_at": "ISO" }
-Challenge: { "challenge_id": "ch_...", "masked_phone": "+234 ••• ••• 0101", "masked_email": "t••••@example.com or null", "via": "email | voice | sms", "expires_in": 300, "resend_in": 60 }
+Challenge: { "challenge_id": "ch_...", "masked_email": "t••••@example.com", "via": "email", "expires_in": 300, "resend_in": 60 }
 Invite: { "code": "CL-7K4Q", "kind": "patient | caregiver", "facility": "string", "invited_by": "string",
-  "patient_first_name": "Chidi", "caregiver_name": "string or null", "relation": "string or null", "masked_phone": "string or null" }
-Caregiver: { "id": "cg-1", "patient_id": "p-zainab", "name": "Hadiza Musa", "relation": "Daughter", "masked_phone": "string", "scope": "string", "added_at": "ISO" }
+  "patient_first_name": "Chidi", "caregiver_name": "string or null", "relation": "string or null", "masked_email": "the patient's address on file, or null" }
+Caregiver: { "id": "cg-1", "patient_id": "p-zainab", "name": "Hadiza Musa", "relation": "Daughter", "masked_phone": "string or null", "scope": "string", "added_at": "ISO" }
 ```
 
 | `CareLoopAPI` method | HTTP | Request body | Response |
 |---|---|---|---|
 | `getPatientSession()` | `GET /auth/patient/session` | | `{ session: PatientSession or null }` |
-| `startPhoneSignIn(body)` | `POST /auth/patient/otp` | `{ phone, via }` (`via` defaults to `email`) | `Challenge` (same answer for unknown numbers) |
-| `startInviteSignIn(code, body)` | `POST /auth/invites/{code}/otp` | `{ via, email?, phone? }` (email when `via` is `email`; phone only for caregiver invites) | `Challenge` |
-| `resendCode(id, body)` | `POST /auth/patient/otp/{id}/resend` | `{ via }` | `Challenge`; 429 before `resend_in` |
-| `verifyCode({ challenge_id, code })` | `POST /auth/patient/otp/{id}/verify` | `{ code }` | `{ session }`; 401 wrong, 410 expired, 404 number not linked |
-| `signInWithPin(body)` | `POST /auth/patient/pin-sign-in` | `{ phone_e164, pin }` | `{ session }`; 401 with `locked` |
+| `startEmailSignIn(body)` | `POST /auth/patient/otp` | `{ email }` | `Challenge` (same answer for unknown addresses); 400 for an address that is not valid |
+| `startInviteSignIn(code, body)` | `POST /auth/invites/{code}/otp` | `{ email }` | `Challenge`; 409 if the address belongs to another account |
+| `resendCode(id)` | `POST /auth/patient/otp/{id}/resend` | | `Challenge`; 429 before `resend_in` |
+| `verifyCode({ challenge_id, code })` | `POST /auth/patient/otp/{id}/verify` | `{ code }` | `{ session }`; 401 wrong, 410 expired |
+| `signInWithPin(body)` | `POST /auth/patient/pin-sign-in` | `{ email, pin }` | `{ session }`; 401 with `locked`; 404 if the remembered address has no account |
 | `setPin(body)` | `POST /auth/patient/pin` | `{ pin }` | `{ session }` |
 | `getInvite(code)` | `GET /auth/invites/{code}` | | `{ invite }`; 404 or 410 |
 | `signOutPatient()` | `POST /auth/patient/sign-out` | | `{ ok }` |
@@ -253,7 +254,7 @@ The mock adds `demo_code` to challenges, `demo_link` to reset responses and `dem
 | `getPlan(id)` | `GET /patients/{id}/plan` | | `{ plan, tasks: Task[] }` |
 | `updatePlan(planId, body)` | `PATCH /plans/{planId}` *(added)* | edited Plan fields | `{ plan }` |
 | `approvePlan(planId, body)` | `POST /plans/{planId}/approve` | `{ override_issues }` | `{ plan }` |
-| `getMessages(id)` | `GET /patients/{id}/messages` | | `{ messages[] }` |
+| `getMessages(id)` | `GET /patients/{id}/messages` | | `{ messages[], welcome? }`. For the patient or their caregiver, `welcome: { text, suggestions[] }` is Tomi's greeting: their first name, what she can do and "What would you like to ask?" (one line each, separated by newlines), plus questions to tap (today's plan, the next visit if one is booked, the first medicine on the approved plan). Prepared lines in the patient's language from `voice/prompts/lines.json`, never generated. Not sent to staff |
 | `sendMessage(id, body)` | `POST /patients/{id}/messages` | `{ original_text, language, task_id?, quick_reply? }` | `{ reply, barrier, escalation, reschedule }`. `reply.original_text` is in the patient's language when the Language Agent's checks pass, with `english_text`, `language`, `number_check_passed` and `uncertainty_flags`; otherwise English with `number_check_passed: false` |
 | `listEvents({ patient_id, limit })` | `GET /patients/{id}/events`, or `GET /events` *(added)* for the feed across all patients | | `{ events: CareEvent[] }`, newest first |
 | `listAppointments(filters)` | `GET /appointments?patient_id=` | | `{ appointments[] }` |
@@ -314,7 +315,12 @@ The UI shows these only while mocks are on:
 - `GET /demo/sample-notes`
 - `POST /demo/reset`
 
-## Care-team assistant
+## Care-team assistant (Tomi)
+
+Every assistant in CareLoop is called Tomi (decided by Nunsi, 5 Nov 2026). When the panel opens, `getAssistantWelcome`
+greets the clinician by first name (titles such as "Dr." dropped), says what Tomi can do, asks what they would like to
+ask, and offers questions to tap, built from the facility's own patients (or the selected one). A tapped question is sent
+at once.
 
 A panel in the dashboard where a clinician types or speaks (browser speech-to-text, `en-NG`) a question or an instruction.
 
@@ -332,6 +338,7 @@ not give, and flags anything missing as an `issue`. Changes the patient has not 
 
 | `CareLoopAPI` method | HTTP | Request body | Response |
 |---|---|---|---|
+| `getAssistantWelcome({ patient_id? })` | `GET /assistant/welcome?patient_id=` | | `{ welcome: { text, suggestions[] } }`. 404 for a patient outside the facility |
 | `draftAssistantActions(body)` | `POST /assistant/drafts` | `{ text, patient_id?, history? }` | `{ draft: { instruction, mode: "answer" \| "draft", patient, reply, needs_patient, choices?, actions[], templates[] } }` |
 | `applyAssistantActions(body)` | `POST /assistant/apply` | `{ patient_id, actions[], by }` | `{ results: [{ id, kind, ok, summary }], patient }` |
 

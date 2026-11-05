@@ -205,6 +205,12 @@ def _plural(count: int, word: str) -> str:
     return f"{count} {word}{'' if count == 1 else 's'}"
 
 
+def ranked_overview(facility: str) -> list[dict]:
+    """The facility's patients, the ones needing attention first."""
+    return sorted(briefs.facility_overview(facility),
+                  key=lambda row: (-row["open_escalations"], -row["overdue_high_importance"], -row["open_problems"], -row["tasks"]["missed"]))
+
+
 def _rules_answer(patient: dict | None, facility: str) -> str:
     """Without a model: a plain summary from the record, never a guess."""
     if patient:
@@ -216,10 +222,8 @@ def _rules_answer(patient: dict | None, facility: str) -> str:
         next_visit = f"Next visit: {visit['what']}, {visit['when']}." if visit else "No visit booked."
         return (f"{patient['name']}: {counts['done']} tasks done, {counts['due']} due and {counts['missed']} missed. "
                 f"Medicines: {medicines}. {next_visit} {_plural(escalations, 'open escalation')}.")
-    rows = sorted(briefs.facility_overview(facility),
-                  key=lambda row: (-row["open_escalations"], -row["overdue_high_importance"], -row["open_problems"], -row["tasks"]["missed"]))
     flagged = []
-    for row in rows:
+    for row in ranked_overview(facility):
         reasons = [_plural(row["open_escalations"], "open escalation") if row["open_escalations"] else "",
                    _plural(row["overdue_high_importance"], "overdue high-importance task") if row["overdue_high_importance"] else "",
                    _plural(row["open_problems"], "open problem") if row["open_problems"] else "",

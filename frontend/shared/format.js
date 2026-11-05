@@ -36,6 +36,8 @@ export function maskPhone(e164) {
   return `+${country ? country.dial : e164.slice(1, 4)} ••• ••• ${e164.slice(-4)}`;
 }
 
+export const maskEmail = (email = '') => email.replace(/^(.)(.*)(@.*)$/, (_, first, middle, domain) => `${first}${'•'.repeat(Math.min(middle.length, 6))}${domain}`);
+
 export const formatTime = (iso) => new Date(iso).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
 
 export const formatDate = (iso) => new Date(iso).toLocaleDateString(locale, { weekday: 'short', day: 'numeric', month: 'short' });

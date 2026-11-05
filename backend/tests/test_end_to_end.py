@@ -35,7 +35,7 @@ def test_discharge_note_to_escalation_on_the_dashboard(client, mailbox):
     client.post("/api/auth/staff/sign-out", json={})
 
     # 3. The patient joins with the invite code and an email code, sets a PIN and agrees to email and calls.
-    challenge = client.post(f"/api/auth/invites/{invite}/otp", json={"via": "email", "email": EMAIL}).json()
+    challenge = client.post(f"/api/auth/invites/{invite}/otp", json={"email": EMAIL}).json()
     session = client.post(f"/api/auth/patient/otp/{challenge['challenge_id']}/verify", json={"code": mailbox.last_code(EMAIL)}).json()["session"]
     assert session["patient_id"] == patient["id"] and session["consent_needed"] is True
     client.post(f"/api/patients/{patient['id']}/consent", json={"channels": ["web", "email", "voice"], "pin": "4826", "scope": "patient_follow_up", "version": "v1"})

@@ -175,7 +175,7 @@ function Helpers({ patient }) {
           {query.data.caregivers.map((helper) => (
             <li key={helper.id}>
               <span className="helper-initial" aria-hidden="true">{helper.name.charAt(0)}</span>
-              <span className="helper-text"><strong>{helper.name}</strong><span>{helper.relation}, {helper.masked_phone}. Added {formatDateLong(helper.added_at)}.</span></span>
+              <span className="helper-text"><strong>{helper.name}</strong><span>{helper.relation}{helper.masked_phone ? `, ${helper.masked_phone}` : ''}. Added {formatDateLong(helper.added_at)}.</span></span>
               <button type="button" className="btn btn-quiet" onClick={() => setRemoving(helper)}><UserMinus aria-hidden="true" size={18} />Remove<span className="sr-only"> {helper.name}</span></button>
             </li>
           ))}

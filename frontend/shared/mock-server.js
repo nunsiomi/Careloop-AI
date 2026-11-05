@@ -507,9 +507,13 @@ function chatReply(patient, payload) {
   const quick = payload.quick_reply;
   const result = { reply: null, barrier: null, escalation: null, reschedule: null };
   const kind = quick || classify(text).kind;
+  const asking = /\?\s*$/.test(text) || /^\s*(what|when|which|where)\b/i.test(text);
+  const planned = !quick && asking && !['red_flag', 'reschedule', 'barrier'].includes(kind) ? planAnswer(patient, text) : null;
   if (kind === 'red_flag') {
     result.escalation = { ...createEscalation(patient, text, 'web'), call_number: SUPPORT.emergency_number };
     result.reply = 'This may need urgent care. Please go to the nearest hospital now, or call 112. I have sent this to your care team.';
+  } else if (planned) {
+    result.reply = planned;
   } else if (kind === 'barrier' || ['cost', 'transport', 'stock', 'understanding'].includes(kind)) {
     const type = ['cost', 'transport', 'stock', 'understanding'].includes(kind) ? kind : classify(text).type;
     result.barrier = openBarrier(patient, type, 'web');
@@ -852,31 +856,94 @@ function isQuestion(text) {
 const plural = (count, word) => `${count} ${word}${count === 1 ? '' : 's'}`;
 
 // The rules-based answer the API gives without a model: counts from the record, never a guess.
-function rulesAnswer(patient) {
-  const tasksOf = (id) => db.tasks.filter((task) => task.patient_id === id);
-  const counts = (id) => {
-    const tasks = tasksOf(id);
-    return { done: tasks.filter((task) => ['patient_reported_done', 'clinician_verified'].includes(task.status)).length, due: tasks.filter((task) => task.status === 'pending').length, missed: tasks.filter((task) => ['overdue', 'unable'].includes(task.status)).length };
-  };
-  const openEscalations = (id) => db.escalations.filter((item) => item.patient_id === id && item.status !== 'resolved').length;
-  if (patient) {
-    const count = counts(patient.id);
-    const plan = db.plans.find((item) => item.patient_id === patient.id && item.status === 'approved') || db.plans.find((item) => item.patient_id === patient.id);
-    const medicines = (plan?.medications || []).map((item) => item.name).join(', ') || 'none on the plan';
-    const visit = db.appointments.filter((item) => item.patient_id === patient.id && item.status !== 'cancelled' && item.starts_at > new Date().toISOString()).sort((a, b) => a.starts_at.localeCompare(b.starts_at))[0];
-    const when = visit && new Date(visit.starts_at).toLocaleString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
-    return `${patient.name}: ${count.done} tasks done, ${count.due} due and ${count.missed} missed. Medicines: ${medicines}. ${visit ? `Next visit: ${visit.what}, ${when}.` : 'No visit booked.'} ${plural(openEscalations(patient.id), 'open escalation')}.`;
-  }
-  const flagged = db.patients.map((item) => {
-    const count = counts(item.id);
+const tasksOf = (id) => db.tasks.filter((task) => task.patient_id === id);
+const taskCounts = (id) => {
+  const tasks = tasksOf(id);
+  return { done: tasks.filter((task) => ['patient_reported_done', 'clinician_verified'].includes(task.status)).length, due: tasks.filter((task) => task.status === 'pending').length, missed: tasks.filter((task) => ['overdue', 'unable'].includes(task.status)).length };
+};
+const openEscalations = (id) => db.escalations.filter((item) => item.patient_id === id && item.status !== 'resolved').length;
+const planOf = (id) => db.plans.find((item) => item.patient_id === id && item.status === 'approved') || db.plans.find((item) => item.patient_id === id);
+const nextVisit = (id) => db.appointments.filter((item) => item.patient_id === id && item.status !== 'cancelled' && item.starts_at > new Date().toISOString()).sort((a, b) => a.starts_at.localeCompare(b.starts_at))[0];
+const visitWhen = (visit) => new Date(visit.starts_at).toLocaleString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+
+// The facility's patients, the ones needing attention first.
+function rankedPatients() {
+  return db.patients.map((item) => {
+    const count = taskCounts(item.id);
     const overdue = tasksOf(item.id).filter((task) => task.status === 'overdue' && task.criticality === 'high').length;
     const problems = db.barriers.filter((barrier) => barrier.patient_id === item.id && !barrier.status.startsWith('resolved')).length;
     const escalations = openEscalations(item.id);
     const reasons = [escalations && plural(escalations, 'open escalation'), overdue && plural(overdue, 'overdue high-importance task'), problems && plural(problems, 'open problem'), count.missed && `${count.missed} missed`].filter(Boolean);
-    return { name: item.name, rank: [escalations, overdue, problems, count.missed], reasons };
-  }).filter((row) => row.reasons.length).sort((a, b) => b.rank.map((value, index) => value - a.rank[index]).find(Boolean) || 0);
+    return { patient: item, name: item.name, rank: [escalations, overdue, problems, count.missed], reasons };
+  }).sort((a, b) => b.rank.map((value, index) => value - a.rank[index]).find(Boolean) || 0);
+}
+
+function rulesAnswer(patient) {
+  if (patient) {
+    const count = taskCounts(patient.id);
+    const medicines = (planOf(patient.id)?.medications || []).map((item) => item.name).join(', ') || 'none on the plan';
+    const visit = nextVisit(patient.id);
+    return `${patient.name}: ${count.done} tasks done, ${count.due} due and ${count.missed} missed. Medicines: ${medicines}. ${visit ? `Next visit: ${visit.what}, ${visitWhen(visit)}.` : 'No visit booked.'} ${plural(openEscalations(patient.id), 'open escalation')}.`;
+  }
+  const flagged = rankedPatients().filter((row) => row.reasons.length);
   if (!flagged.length) return 'No patient has an open escalation, an overdue task or an open problem right now.';
   return `Needing attention:\n${flagged.slice(0, 6).map((row) => `- ${row.name}: ${row.reasons.join(', ')}`).join('\n')}`;
+}
+
+/* ---------- Tomi's welcome (backend: app/services/welcome.py) ---------- */
+
+// The signed-in person, read through shared/mock-auth.js (which registers the reader; it imports this file).
+let readSignedIn = () => null;
+export function setSessionReader(reader) { readSignedIn = reader; }
+
+const firstNameOf = (name) => String(name || '').trim().replace(/^(dr|doctor|nurse|pharm|prof|mr|mrs|ms|miss|matron|sister)\.?\s+/i, '').split(' ')[0];
+const medicineOf = (names) => names.map((name) => String(name || '').split(/\s+\d/)[0].trim()).find(Boolean) || null;
+
+// The mock answers in English for every language, like its chat replies; the API uses prepared lines in the patient's language.
+function patientWelcome(patient, speaker) {
+  const medicine = medicineOf((planOf(patient.id)?.status === 'approved' ? planOf(patient.id).medications : []).map((item) => item.name));
+  return {
+    text: [`Hello ${firstNameOf(speaker) || firstNameOf(patient.name)}, I am Tomi, your CareLoop assistant.`,
+      'I can tell you what is on the plan today, when the next visit is, and what a medicine on the plan is for. Anything else, I pass to the care team.',
+      'What would you like to ask?'].join('\n'),
+    suggestions: ['What is on the plan today?', ...(nextVisit(patient.id) ? ['When is the next visit?'] : []), ...(medicine ? [`What is ${medicine} for?`] : [])]
+  };
+}
+
+function staffWelcome(name, patient) {
+  const hour = new Date().getHours();
+  const text = [`${hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening'}, ${firstNameOf(name) || 'there'}. I am Tomi, your CareLoop assistant.`,
+    'I can tell you who needs attention and how a patient is doing, look up a medicine, or explain a report you paste in. I can also draft reminders, visits, email reminders, Tomi calls and notes. Nothing is saved until you confirm.',
+    'What would you like to ask?'].join('\n');
+  if (patient) {
+    const who = firstNameOf(patient.name);
+    const medicine = medicineOf((planOf(patient.id)?.medications || []).map((item) => item.name));
+    return { text, suggestions: [`How is ${who} doing?`, `What medicines is ${who} on?`, ...(medicine ? [`What is ${medicine.toLowerCase()} used for?`] : []), `Book ${who} a follow-up visit next week`] };
+  }
+  const rows = rankedPatients();
+  if (!rows.length) return { text, suggestions: ['Who needs attention today?'] };
+  const medicine = medicineOf(rows.flatMap((row) => (planOf(row.patient.id)?.medications || []).map((item) => item.name)));
+  return { text, suggestions: ['Who needs attention today?', `How is ${firstNameOf(rows[0].name)} doing?`, ...(medicine ? [`What is ${medicine.toLowerCase()} used for?`] : []), `Book ${firstNameOf(rows[rows.length - 1].name)} a follow-up visit next week`] };
+}
+
+// A question about today's plan or the next visit, answered from the record; a medicine question goes to the care team.
+function planAnswer(patient, text) {
+  const lower = text.toLowerCase();
+  if (/\b(today|this morning|tonight)\b/.test(lower)) {
+    const today = new Date().toDateString();
+    const rows = tasksOf(patient.id).filter((task) => new Date(task.due_at).toDateString() === today).sort((a, b) => a.due_at.localeCompare(b.due_at));
+    if (!rows.length) return 'There is nothing on the plan for today.';
+    return `Today on the plan:\n${rows.map((task) => `- ${task.title}, ${new Date(task.due_at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })} (${task.status.replaceAll('_', ' ')})`).join('\n')}`;
+  }
+  if (/\b(next|when)\b.*\b(visit|appointment|clinic)\b/.test(lower)) {
+    const visit = nextVisit(patient.id);
+    return visit ? `The next visit: ${visit.what}, ${visit.where}, ${visitWhen(visit)}.` : 'There is no visit booked. Your care team can help.';
+  }
+  if (/^\s*what (is|are) .+ for\??$/.test(lower)) {
+    logEvent(patient.id, { actor_type: 'patient', actor_id: patient.name, source_channel: 'web', event_type: 'question_for_care_team', summary: `Asked the care team: "${text}"`, verification_status: 'self_reported' });
+    return 'I have passed your question to your care team. Someone will get back to you.';
+  }
+  return null;
 }
 
 function mentionedPatient(text) {
@@ -1030,6 +1097,10 @@ function applyAction(patient, action, by) {
 }
 
 const assistantMethods = {
+  async getAssistantWelcome({ patient_id } = {}) {
+    const session = readSignedIn('staff');
+    return respond({ welcome: staffWelcome(session?.user.name, patient_id ? findPatient(patient_id) : null) }, 200);
+  },
   async draftAssistantActions({ text, patient_id }) {
     const instruction = String(text || '').trim();
     if (!instruction) { const error = new Error('Type or say what you want done.'); error.status = 400; throw error; }
@@ -1141,7 +1212,11 @@ export const mock = {
     return respond({ plan });
   },
 
-  async getMessages(patientId) { return respond({ messages: db.messages.filter((message) => message.patient_id === patientId) }); },
+  async getMessages(patientId) {
+    const session = readSignedIn('patient');
+    const welcome = session?.patient_id === patientId ? patientWelcome(findPatient(patientId), session.user_name) : undefined;
+    return respond({ messages: db.messages.filter((message) => message.patient_id === patientId), welcome });
+  },
   async sendMessage(patientId, payload) {
     const patient = findPatient(patientId);
     db.messages.push({ id: makeId('m'), patient_id: patientId, direction: 'patient', channel: 'web', original_text: payload.original_text, language: patient.language, created_at: nowIso() });

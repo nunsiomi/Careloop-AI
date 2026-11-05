@@ -97,7 +97,7 @@ def test_chat_question_goes_to_tomi_and_only_plan_medicines_are_looked_up(client
         return "Amlodipine is used to treat high blood pressure. Your care team chose it for you."
 
     monkeypatch.setattr(tomi_chat, "run", fake_run)
-    patient_sign_in(client, mailbox, "0800 000 0102", "tola.adeyemi@kestrelmail.ng")
+    patient_sign_in(client, mailbox, "tola.adeyemi@kestrelmail.ng")
     from app.services import chat
     reply = asyncio.run(chat.handle(store().get("patients", "p-tola"), {"original_text": "What is my amlodipine for?"}))
     assert calls["on_plan"]["found"] is True and calls["off_plan"]["found"] is False
