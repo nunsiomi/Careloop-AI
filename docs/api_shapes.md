@@ -201,7 +201,7 @@ Caregiver: { "id": "cg-1", "patient_id": "p-zainab", "name": "Hadiza Musa", "rel
 
 ### Care team
 
-- Password: at least 12 characters, no composition rules, block common and breached passwords and the user's email (NIST SP 800-63B). Lock for a short time after 5 failures.
+- Password: at least 8 characters, no composition rules, block common and breached passwords and the user's email (NIST SP 800-63B). Lock for a short time after 5 failures.
 - Every sign-in needs a second step: a 6-digit code emailed to the account's address (15 minutes, 5 tries, resend after 60 s). There are no authenticator apps or backup codes. Someone who loses their email asks their facility's CareLoop admin to change it. Staff sessions last 12 h and the page locks after 15 idle minutes.
 - Staff join two ways: an invite link from a colleague, or self sign-up with any email address (personal addresses are allowed), a care facility from `GET /facilities` (a hospital, pharmacy, clinic or care home; the person picks the type first, then the facility) and that facility's join code. The facility's CareLoop admin hands the code to their own staff and can change it at any time. Without the right code for the chosen facility, no account is created (403 with `field: "join_code"`). After 5 wrong codes, sign-up is blocked for 10 minutes (429). Join codes are never sent to the browser. Sign-up then confirms the email with a 6-digit code and signs the person in. If the address already has an account, the response is the same and the email tells the owner to sign in instead.
 - Production: rate-limit join-code attempts per IP address and per facility, log each sign-up for the facility admin, and let the admin remove an account.

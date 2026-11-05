@@ -95,11 +95,11 @@ function ChangePasswordDialog({ email, onClose }) {
         <input type="email" value={email} autoComplete="username" readOnly hidden />
         <PasswordField id="current-password" label="Current password" value={current} onChange={setCurrent} />
         <PasswordField id="next-password" label="New password" value={next} onChange={setNext} autoComplete="new-password" describedBy="next-hint" />
-        <p id="next-hint" className="hint">At least 12 characters. A short phrase works well.</p>
+        <p id="next-hint" className="hint">At least 8 characters. A short phrase works well.</p>
         {error && <p className="field-error" role="alert">{error}</p>}
         <div className="modal-actions">
           <button type="button" className="btn btn-quiet" onClick={onClose}>Cancel</button>
-          <button type="submit" className="btn btn-primary" disabled={busy || !current || next.length < 12}>{busy ? 'Saving…' : 'Change password'}</button>
+          <button type="submit" className="btn btn-primary" disabled={busy || !current || next.length < 8}>{busy ? 'Saving…' : 'Change password'}</button>
         </div>
       </form>
     </Modal>

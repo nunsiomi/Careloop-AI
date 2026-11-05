@@ -192,7 +192,7 @@ export function ForgotPassword() {
 function PasswordRules({ password, email }) {
   const local = (email || '').split('@')[0].toLowerCase();
   const rules = [
-    ['At least 12 characters', password.length >= 12],
+    ['At least 8 characters', password.length >= 8],
     ['Not your email address', !password || !local || local.length < 4 || !password.toLowerCase().includes(local)]
   ];
   return (
@@ -239,7 +239,7 @@ export function ResetPassword() {
         <div id="pw-rules"><PasswordRules password={password} email="" /></div>
         <PasswordField id="confirm-password" label="Type it again" value={confirm} onChange={setConfirm} autoComplete="new-password" invalid={Boolean(confirm) && confirm !== password} />
         {error && <p className="field-error" role="alert">{error}</p>}
-        <button type="submit" className="btn btn-primary btn-lg btn-block" disabled={busy || password.length < 12 || !confirm}>{busy ? 'Saving…' : 'Save new password'}</button>
+        <button type="submit" className="btn btn-primary btn-lg btn-block" disabled={busy || password.length < 8 || !confirm}>{busy ? 'Saving…' : 'Save new password'}</button>
       </form>
     </AuthFrame>
   );
@@ -334,7 +334,7 @@ export function SignUp({ onSignedIn }) {
   const chosen = facilities.find((item) => item.id === form.facility_id);
   const typeLabel = types.find((item) => item.id === form.facility_type)?.label.toLowerCase();
   const codeError = error?.field === 'join_code';
-  const ready = form.name.trim() && form.email.includes('@') && form.facility_id && form.join_code.trim().length >= 4 && form.role && form.password.length >= 12 && form.confirmed;
+  const ready = form.name.trim() && form.email.includes('@') && form.facility_id && form.join_code.trim().length >= 4 && form.role && form.password.length >= 8 && form.confirmed;
 
   return (
     <AuthFrame title="Create your account" lede="You need your care facility's code to sign up. Its CareLoop admin gives the code to staff.">
@@ -445,7 +445,7 @@ export function JoinInvite({ onSignedIn }) {
         <PasswordField id="join-password" label="Choose a password" value={password} onChange={setPassword} autoComplete="new-password" describedBy="join-rules" autoFocus />
         <div id="join-rules"><PasswordRules password={password} email={invite.email} /></div>
         {error && <p className="field-error" role="alert">{error}</p>}
-        <button type="submit" className="btn btn-primary btn-lg btn-block" disabled={busy || password.length < 12}>{busy ? 'Saving…' : 'Open CareLoop'}</button>
+        <button type="submit" className="btn btn-primary btn-lg btn-block" disabled={busy || password.length < 8}>{busy ? 'Saving…' : 'Open CareLoop'}</button>
       </form>
     </AuthFrame>
   );

@@ -3,6 +3,7 @@
 import asyncio
 import copy
 import json
+import re
 from datetime import timedelta
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
@@ -58,6 +59,33 @@ def test_unknown_staff_email_gets_the_same_answer(client, mailbox):
     assert unknown.status_code == 401 and unknown.json()["detail"].startswith("That email and password do not match")
     assert reset.json() == {"ok": True}
     assert mailbox.sent == []
+
+
+def test_staff_password_reset_link_sets_a_new_password_once(client, mailbox):
+    assert client.post("/api/auth/staff/password-reset", json={"email": ADA["email"]}).json() == {"ok": True}
+    mail = mailbox.sent[-1]
+    assert mail["to"] == ADA["email"]
+    link = re.search(r"http://localhost:5173/clinician/#/reset-password/(\S+)", mail["text"])
+    assert link, mail["text"]
+    token = link.group(1)
+
+    assert client.get(f"/api/auth/staff/password-reset/{token}").json()["email_masked"].endswith("@kestrelgeneral.ng")
+    assert client.post(f"/api/auth/staff/password-reset/{token}", json={"password": "short1"}).status_code == 400
+    assert client.post(f"/api/auth/staff/password-reset/{token}", json={"password": "ward4day"}).status_code == 200
+    assert client.post(f"/api/auth/staff/password-reset/{token}", json={"password": "ward4day"}).status_code == 410
+
+    assert client.post("/api/auth/staff/sign-in", json=ADA).status_code == 401
+    staff_sign_in(client, mailbox, password="ward4day")
+
+
+def test_patient_forgot_pin_emails_a_code_then_sets_a_new_pin(client, mailbox):
+    phone, email = "0800 000 0102", "tola.adeyemi@kestrelmail.ng"
+    patient_sign_in(client, mailbox, phone, email)
+    assert mailbox.sent[-1]["to"] == email
+    assert client.post("/api/auth/patient/pin", json={"pin": "4071"}).status_code == 200
+
+    assert client.post("/api/auth/patient/pin-sign-in", json={"phone_e164": "+2348000000102", "pin": "1234"}).status_code == 401
+    assert client.post("/api/auth/patient/pin-sign-in", json={"phone_e164": "+2348000000102", "pin": "4071"}).status_code == 200
 
 
 def test_staff_from_another_facility_see_none_of_kestrels_patients(client, mailbox):

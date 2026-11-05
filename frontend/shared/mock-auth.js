@@ -11,7 +11,7 @@ const DEMO_PIN = '1234';
 const CODE_TTL = 300; // seconds a sign-in code stays valid
 const RESEND_AFTER = 60;
 const MAX_TRIES = 5;
-const COMMON_PASSWORDS = ['password', 'password1', 'password123', '123456789012', 'careloop123', 'qwertyuiop', 'iloveyou', 'nigeria123', 'lagos12345', 'welcome123'];
+const COMMON_PASSWORDS = ['password', 'password1', 'password123', '123456789012', 'careloop123', 'qwertyuiop', 'iloveyou', 'nigeria123', 'lagos12345', 'welcome123', '12345678', '123456789', '87654321', '11111111', 'qwerty123', 'abc12345', 'abcd1234', 'passw0rd', 'letmein1', 'sunshine', 'football', 'baseball'];
 
 const FACILITY = 'Kestrel General Hospital';
 const FACILITY_TYPES = [
@@ -599,7 +599,7 @@ function staffSession(user, rememberDevice) {
 }
 
 export function passwordProblem(password, email = '') {
-  if (!password || password.length < 12) return 'Use at least 12 characters.';
+  if (!password || password.length < 8) return 'Use at least 8 characters.';
   if (password.length > 128) return 'Use 128 characters or fewer.';
   if (COMMON_PASSWORDS.includes(password.toLowerCase())) return 'That password is too common. Try a short phrase only you would know.';
   const local = email.split('@')[0]?.toLowerCase();

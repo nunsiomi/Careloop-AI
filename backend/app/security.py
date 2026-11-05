@@ -73,13 +73,14 @@ def reset_rate_limits() -> None:
 
 
 COMMON_PASSWORDS = {"password", "password1", "password123", "123456789012", "careloop123", "qwertyuiop", "iloveyou",
-                    "nigeria123", "lagos12345", "welcome123"}
+                    "nigeria123", "lagos12345", "welcome123", "12345678", "123456789", "87654321",
+                    "11111111", "qwerty123", "abc12345", "abcd1234", "passw0rd", "letmein1", "sunshine", "football", "baseball"}
 
 
 def password_problem(password: str | None, email: str = "") -> str | None:
     """NIST SP 800-63B style: length, not common, not the email. Same messages as the app."""
-    if not password or len(password) < 12:
-        return "Use at least 12 characters."
+    if not password or len(password) < 8:
+        return "Use at least 8 characters."
     if len(password) > 128:
         return "Use 128 characters or fewer."
     if password.lower() in COMMON_PASSWORDS:
