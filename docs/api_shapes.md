@@ -247,7 +247,7 @@ The mock adds `demo_code` to challenges, `demo_link` to reset responses and `dem
 | `removeStaff(id)` | `DELETE /admin/staff/{id}` *(added; admin only)* | | `{ ok }`; signs them out everywhere and unassigns their patients; 409 for yourself |
 | `listPatients()` | `GET /patients` | | `{ patients: Patient[] }` |
 | `getPatient(id)` | `GET /patients/{id}` | | `{ patient }` |
-| `createPatient(body)` | `POST /patients` | `{ name, phone_e164, email, language, literacy_level, caregiver_mode }` | `{ patient }` |
+| `createPatient(body)` | `POST /patients` | `{ name, phone_e164, email, language, literacy_level, caregiver_mode }` (email required: the patient signs in with it) | `{ patient }`; 400 without a valid email, 409 if the number or email is already linked to someone |
 | `updateProfile(id, body)` | `PATCH /patients/{id}/profile` | `{ language, literacy_level, caregiver_mode }` | `{ patient }` |
 | `recordConsent(id, body)` | `POST /patients/{id}/consent` | `{ channels[], scope, version, contact_window, pin? }` | `{ patient }` |
 | `createPlan(body)` | `POST /patients/{id}/plan` | `{ patient_id, source_note }`; runs Care Plan and Plan Verifier | `{ plan }` |

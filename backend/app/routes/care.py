@@ -6,7 +6,7 @@ from app.db import store
 from app.routes.deps import patient_for, record_for, require_any, require_patient, require_staff, scoped
 from app.security import hash_secret
 from app.agents import language
-from app.services import care, chat, escalations, outbox, plans, welcome
+from app.services import care, chat, escalations, identity, outbox, plans, welcome
 from app.services.activity_log import log_event
 from app.util import EMAIL_PATTERN, ApiError, make_id, normalize_phone, now_iso
 
@@ -37,13 +37,16 @@ def create_patient(request: Request, body: dict = Body(default={})):
     actor = require_staff(request)
     name = str(body.get("name") or "").strip()
     phone = normalize_phone(body.get("phone_e164"))
-    email = str(body.get("email") or "").strip() or None
+    email = str(body.get("email") or "").strip()
     if len(name) < 3:
         raise ApiError("Add the patient's full name.")
     if not phone:
         raise ApiError("Check the mobile number, for example +234 803 123 4567.")
-    if email and not EMAIL_PATTERN.match(email):
-        raise ApiError("Check the email address, or leave it empty.")
+    # Patients sign in with their email address, so every new patient needs one, and it must not belong to another account.
+    if not EMAIL_PATTERN.match(email):
+        raise ApiError("Add the patient's email address. They use it to sign in.")
+    if identity.holder_by_email(email):
+        raise ApiError("This email address is already linked to someone in CareLoop. Check it with the patient.", 409)
     if store().first("patients", phone_e164=phone) or store().first("caregivers", phone_e164=phone):
         raise ApiError("This mobile number is already linked to someone in CareLoop. Check it with the patient.", 409)
     facility = store().first("facilities", name=actor.facility) or {}

@@ -348,3 +348,12 @@ def test_a_helper_joins_by_email_and_keeps_the_phone_the_patient_gave(client, ma
     session = client.post(f"/api/auth/patient/otp/{challenge['challenge_id']}/verify", json={"code": mailbox.last_code("femi.adeyemi@example.com")}).json()["session"]
     assert (session["kind"], session["patient_id"], session["email"]) == ("caregiver", "p-tola", "femi.adeyemi@example.com")
     assert store().first("caregivers", name="Femi Adeyemi")["phone_e164"] == "+2348000000301"  # Tomi knows them when they call
+
+
+def test_a_new_patient_needs_an_email_address_no_one_else_uses(client, mailbox):
+    staff_sign_in(client, mailbox)
+    base = {"name": "Amaka Obi", "phone_e164": "+234 0800 000 0151", "language": "Igbo"}
+    assert client.post("/api/patients", json=base).status_code == 400
+    assert client.post("/api/patients", json={**base, "email": "not an email"}).status_code == 400
+    assert client.post("/api/patients", json={**base, "email": "Zainab.Musa@kestrelmail.ng"}).status_code == 409
+    assert client.post("/api/patients", json={**base, "email": "amaka.obi@example.com"}).status_code == 200

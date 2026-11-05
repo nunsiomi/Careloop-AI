@@ -1134,6 +1134,11 @@ export const mock = {
   async listPatients() { advanceAll(); return respond({ patients: db.patients.map(patientSummary) }); },
   async getPatient(id) { return respond({ patient: patientSummary(findPatient(id)) }); },
   async createPatient(input) {
+    // Patients sign in with their email address, so every new patient needs one that no one else uses (as the backend checks).
+    const email = String(input.email || '').trim();
+    const invalid = (message, status = 400) => { const error = new Error(message); error.status = status; throw error; };
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) invalid("Add the patient's email address. They use it to sign in.");
+    if (db.patients.some((item) => (item.email || '').toLowerCase() === email.toLowerCase())) invalid('This email address is already linked to someone in CareLoop. Check it with the patient.', 409);
     // The person who adds a patient becomes their lead clinician (the real backend reads the session the same way).
     const staff = JSON.parse(window.localStorage.getItem('careloop-session-staff') || 'null')?.user;
     const patient = { id: makeId('p'), age: null, caregiver: null, email: null, channels: [], contact_window: null, pin_set: false, consent_at: null, activation_status: 'plan_review', caregiver_mode: false, assigned_to: staff ? { id: staff.id, name: staff.name } : null, ...input };

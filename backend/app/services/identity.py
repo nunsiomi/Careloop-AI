@@ -45,7 +45,7 @@ def _holder(e164: str) -> dict | None:
     return None
 
 
-def _holder_by_email(email: str | None) -> dict | None:
+def holder_by_email(email: str | None) -> dict | None:
     """The patient or caregiver account with this email address (patients sign in by email, decided by Nunsi, 5 Nov 2026)."""
     address = str(email or "").strip().lower()
     if not address:
@@ -100,7 +100,7 @@ async def start_email_sign_in(email: str | None, client: str = "") -> dict:
     rate_limit(f"otp:{client}", 10, 600)
     address = _email_address(email)
     challenge = store().add("challenges", {"id": token("ch"), "email": address, "via": "email", "purpose": "sign_in",
-                                           "holder": _holder_by_email(address), "invite_code": None})
+                                           "holder": holder_by_email(address), "invite_code": None})
     await _send_challenge_code(challenge)
     return _challenge_view(challenge)
 
@@ -111,7 +111,7 @@ async def start_invite_sign_in(code: str, email: str | None = None, client: str 
         raise ApiError("This invite code is not valid or has been used. Ask your care team for a new one.", 404)
     rate_limit(f"otp:{client}", 10, 600)
     address = _email_address(email)
-    holder = _holder_by_email(address)
+    holder = holder_by_email(address)
     # One account per email address, because the address is how people sign in. A patient's own address on file is fine.
     if holder and not (invite["kind"] == "patient" and holder["kind"] == "patient" and holder["patient_id"] == invite["patient_id"]):
         raise ApiError("This email address is already used for another CareLoop account. Use a different one.", 409)
@@ -205,7 +205,7 @@ def verify_code(challenge_id: str, code: str) -> tuple[dict, str]:
 def sign_in_with_pin(email: str, pin: str, client: str = "") -> tuple[dict, str]:
     """PIN on a remembered phone. The phone remembers the account's email address, not a phone number."""
     rate_limit(f"pin:{client}", 20, 600)
-    holder = _holder_by_email(email)
+    holder = holder_by_email(email)
     if not holder:
         raise ApiError("This phone is not set up. Sign in with a code instead.", 404)
     record = _holder_record(holder)

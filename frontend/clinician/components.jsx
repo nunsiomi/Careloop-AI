@@ -191,11 +191,11 @@ export function AddPatientDialog({ onClose }) {
 
   const submit = async (event) => {
     event.preventDefault();
-    if (!form.name.trim() || !form.note.trim()) { setError('Add a name and the discharge note.'); return; }
+    if (!form.name.trim() || !form.email.trim() || !form.note.trim()) { setError('Add a name, an email address and the discharge note.'); return; }
     setError(null);
     setStage('drafting');
     try {
-      const { patient } = await CareLoopAPI.createPatient({ name: form.name.trim(), phone_e164: form.phone_e164.trim(), email: form.email.trim() || null, language: form.language, literacy_level: form.literacy_level, caregiver_mode: form.caregiver_mode });
+      const { patient } = await CareLoopAPI.createPatient({ name: form.name.trim(), phone_e164: form.phone_e164.trim(), email: form.email.trim(), language: form.language, literacy_level: form.literacy_level, caregiver_mode: form.caregiver_mode });
       await CareLoopAPI.createPlan({ patient_id: patient.id, source_note: form.note.trim() });
       toast('Patient added. The draft plan is ready for you to check.');
       refreshCounts();
@@ -216,7 +216,7 @@ export function AddPatientDialog({ onClose }) {
         <form className="form-grid" onSubmit={submit} noValidate>
           <div className="field"><label htmlFor="new-name">Full name</label><input id="new-name" className="input" value={form.name} onChange={set('name')} autoComplete="off" /></div>
           <div className="field"><label htmlFor="new-phone">Mobile number</label><input id="new-phone" className="input" type="tel" value={form.phone_e164} onChange={set('phone_e164')} /></div>
-          <div className="field"><label htmlFor="new-email">Email (optional)</label><input id="new-email" className="input" type="email" value={form.email} onChange={set('email')} /></div>
+          <div className="field"><label htmlFor="new-email">Email</label><input id="new-email" className="input" type="email" value={form.email} onChange={set('email')} aria-describedby="new-email-hint" autoComplete="off" required /><p id="new-email-hint" className="hint">The patient signs in with this.</p></div>
           <div className="field">
             <label htmlFor="new-language">Language</label>
             <select id="new-language" className="select" value={form.language} onChange={set('language')}>
