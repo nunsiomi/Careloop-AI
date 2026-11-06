@@ -1202,6 +1202,9 @@ export const mock = {
   async updatePlan(planId, updates) {
     const plan = db.plans.find((item) => item.id === planId) || notFound('Plan');
     Object.assign(plan, updates, { id: plan.id, patient_id: plan.patient_id });
+    // The backend runs its rule checks again; here, an issue clears once the clinician fills in its field.
+    const valueAt = (path) => path.split(/[[\].]+/).filter(Boolean).reduce((value, key) => value?.[key], plan);
+    plan.verifier_issues = (plan.verifier_issues || []).filter((issue) => { const value = valueAt(issue.field); return Array.isArray(value) ? !value.length : !value; });
     logEvent(plan.patient_id, { actor_type: 'clinician', actor_id: REVIEWER, source_channel: 'dashboard', event_type: 'plan_edited', summary: 'Plan fields edited by clinician.', verification_status: 'clinician_verified' });
     return respond({ plan });
   },

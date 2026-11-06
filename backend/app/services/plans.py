@@ -48,6 +48,55 @@ async def create_plan(patient: dict, source_note: str, by: str) -> dict:
     return plan
 
 
+ITEM_NAMES = {"medications": "medicine", "appointments": "appointment", "tests": "test"}
+
+
+def _plain_error(location: tuple) -> str:
+    """Which field to fix, in words a clinician uses: never the pattern behind the check."""
+    section, *rest = location
+    if section == "reminder_times":
+        return "Check the reminder times. Pick each one from the clock, such as 08:00."
+    if section not in ITEM_NAMES or not rest:
+        return "Check the plan fields and try again."
+    number, field = rest[0] + 1 if isinstance(rest[0], int) else 1, rest[-1] if len(rest) > 1 else ""
+    what = f"{ITEM_NAMES[section]} {number}"
+    if field == "date":
+        return f"Check the date of {what}. Pick it from the calendar."
+    if field in ("time", "times") or isinstance(field, int):
+        return f"Check the time{'s' if section == 'medications' else ''} of {what}. Pick each one from the clock, such as 17:00."
+    return f"Check {what} and try again."
+
+
+def _values(value) -> list[str]:
+    items = value if isinstance(value, list) else [value]
+    return [str(item).strip().lower() for item in items if item is not None and str(item).strip()]
+
+
+def _entered(before: dict, after: dict) -> set[tuple[str, str, str]]:
+    """(section, field, value) for each value the clinician filled into an empty field or a new item in this edit.
+    Changing a value that was already there (one drafted from the note) is not included, so it is still checked."""
+    found = set()
+    for section in ITEM_NAMES:
+        old_items = before.get(section) or []
+        for index, item in enumerate(after.get(section) or []):
+            old = old_items[index] if index < len(old_items) else {}
+            for field, value in item.items():
+                if not _values(old.get(field)):
+                    found |= {(section, field, text) for text in _values(value)}
+    return found
+
+
+def _typed_by_clinician(path: str, draft: PlanDraft, entered: set) -> bool:
+    match = re.fullmatch(r"(\w+)\[(\d+)\]\.(\w+)", path)
+    if not match or match.group(1) not in ITEM_NAMES:
+        return False
+    section, index, field = match.group(1), int(match.group(2)), match.group(3)
+    items = getattr(draft, section)
+    if index >= len(items):
+        return False
+    return any((section, field, text) in entered for text in _values(getattr(items[index], field, "")))
+
+
 def update_plan(plan: dict, updates: dict, by: str) -> dict:
     """Clinician edits. The rule checks run again so the issue list matches what is now in the plan."""
     if plan["status"] == "approved":
@@ -58,12 +107,16 @@ def update_plan(plan: dict, updates: dict, by: str) -> dict:
     try:
         draft = PlanDraft.model_validate({**{key: plan.get(key) for key in PLAN_FIELDS}, **{key: changed[key] for key in PLAN_FIELDS if key in changed}})
     except ValidationError as error:
-        raise ApiError(f"Check the plan: {error.errors()[0]['msg']}.") from error
-    plan.update(draft.model_dump())
+        raise ApiError(_plain_error(error.errors()[0]["loc"])) from error
+    entered = {tuple(item) for item in plan.get("clinician_entered", [])} | _entered(plan, draft.model_dump())
+    plan.update(draft.model_dump(), clinician_entered=sorted(list(item) for item in entered))
     if "source_note" in changed:
         plan["source_note"] = changed["source_note"]
     patient = store().get("patients", plan["patient_id"])
-    found = [issue.model_dump() for issue in plan_rules.issues(plan["source_note"], draft, patient["name"] if patient else "")]
+    # A value the clinician typed in is theirs to give, so "not in the note" no longer applies to it. Values the
+    # Care Plan Agent drafted are still checked against the note, and so is anything the note has that the plan lacks.
+    found = [finding.issue.model_dump() for finding in plan_rules.check(plan["source_note"], draft, patient["name"] if patient else "")
+             if not (finding.invented and _typed_by_clinician(finding.issue.field, draft, entered))]
     plan["verifier_issues"], plan["deliverable"] = found, not any(issue["severity"] == "high" for issue in found)
     log_event(plan["patient_id"], actor_type="clinician", actor_id=by, source_channel="dashboard", event_type="plan_edited",
               summary="Plan fields edited by clinician.", verification_status="clinician_verified")

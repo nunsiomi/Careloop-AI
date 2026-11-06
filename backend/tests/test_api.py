@@ -357,3 +357,30 @@ def test_a_new_patient_needs_an_email_address_no_one_else_uses(client, mailbox):
     assert client.post("/api/patients", json={**base, "email": "not an email"}).status_code == 400
     assert client.post("/api/patients", json={**base, "email": "Zainab.Musa@kestrelmail.ng"}).status_code == 409
     assert client.post("/api/patients", json={**base, "email": "amaka.obi@example.com"}).status_code == 200
+
+
+def test_plan_edits_accept_times_and_dates_as_people_write_them(client, mailbox):
+    staff_sign_in(client, mailbox)
+    plan = client.get("/api/patients/p-ibrahim/plan").json()["plan"]  # the note gives no visit date or time
+    visit = {**plan["appointments"][0], "date": "9/11/2026", "time": "5pm"}
+    added = {"name": "Paracetamol 500 mg tablet", "dose": "2 tablets", "frequency": "Three times a day", "times": ["8am", "2:00 pm", "20.00"], "duration": "5 days", "instructions": ""}
+    edited = client.patch(f"/api/plans/{plan['id']}", json={"appointments": [visit], "medications": [*plan["medications"], added]})
+    assert edited.status_code == 200, edited.text
+    saved = edited.json()["plan"]
+    assert (saved["appointments"][0]["date"], saved["appointments"][0]["time"]) == ("2026-11-09", "17:00")
+    assert saved["medications"][1]["times"] == ["08:00", "14:00", "20:00"]
+
+    # What the clinician filled in is theirs: not flagged as "not in the note", on this save or the next one.
+    flagged = {issue["field"] for issue in saved["verifier_issues"]}
+    assert not flagged & {"appointments[0].time", "appointments[0].date", "medications[1].name", "medications[1].dose", "medications[1].times"}
+    again = client.patch(f"/api/plans/{plan['id']}", json={"symptoms_to_watch": ["High fever"]}).json()["plan"]
+    assert "appointments[0].time" not in {issue["field"] for issue in again["verifier_issues"]}
+
+
+def test_a_wrong_plan_value_gets_a_plain_message(client, mailbox):
+    staff_sign_in(client, mailbox)
+    plan = client.get("/api/patients/p-grace/plan").json()["plan"]
+    bad = client.patch(f"/api/plans/{plan['id']}", json={"appointments": [{**plan["appointments"][0], "time": "25:99"}]})
+    assert bad.status_code == 400 and bad.json()["detail"] == "Check the time of appointment 1. Pick each one from the clock, such as 17:00."
+    bad = client.patch(f"/api/plans/{plan['id']}", json={"tests": [{"name": "Blood test", "where": "", "date": "soon"}]})
+    assert bad.json()["detail"] == "Check the date of test 1. Pick it from the calendar."

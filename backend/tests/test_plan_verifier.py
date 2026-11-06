@@ -96,7 +96,7 @@ async def test_wrong_patient_is_flagged():
 @pytest.mark.asyncio
 async def test_malformed_plan_is_flagged_not_crashed():
     plan = tola_plan()
-    plan["medications"][0]["times"] = ["9am"]
+    plan["medications"][0]["times"] = ["after breakfast"]  # "9am" is read as 09:00; words are not a time
 
     result = await verify(note("tola-adeyemi.txt"), plan)
 
